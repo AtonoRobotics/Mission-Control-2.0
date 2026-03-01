@@ -1,0 +1,35 @@
+{
+  "_comment": "MCP server config — checked into git so every developer gets these automatically.",
+  "_source": "anthropic.com/engineering/claude-code-best-practices: check .mcp.json into source control",
+  "mcpServers": {
+    "db_agent": {
+      "command": "python",
+      "args": ["-m", "agents.db_agent.mcp_server"],
+      "env": {
+        "EMPIRICAL_DB_URL": "${EMPIRICAL_DB_URL}",
+        "REGISTRY_DB_URL": "${REGISTRY_DB_URL}"
+      },
+      "description": "Empirical DB reads + registry reads. READ ONLY from empirical DB."
+    },
+    "file_agent": {
+      "command": "python",
+      "args": ["-m", "agents.file_agent.mcp_server"],
+      "env": {
+        "REGISTRY_DB_URL": "${REGISTRY_DB_URL}",
+        "MC_URDF_REGISTRY_PATH": "${MC_URDF_REGISTRY_PATH}",
+        "MC_CONFIG_REGISTRY_PATH": "${MC_CONFIG_REGISTRY_PATH}",
+        "MC_USD_REGISTRY_PATH": "${MC_USD_REGISTRY_PATH}"
+      },
+      "description": "Artifact registration and retrieval. Requires validation_report_id."
+    },
+    "container_agent": {
+      "command": "python",
+      "args": ["-m", "agents.container_agent.mcp_server"],
+      "env": {
+        "DOCKER_HOST": "${DOCKER_HOST:-unix:///var/run/docker.sock}",
+        "MC_HOST_PRIMARY": "${MC_HOST_PRIMARY}"
+      },
+      "description": "Docker exec, container status, package manifests, ROS2 topics."
+    }
+  }
+}

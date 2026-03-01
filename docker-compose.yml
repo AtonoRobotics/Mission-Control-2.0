@@ -1,0 +1,110 @@
+# Mission Control — Docker Compose
+# Isaac ROS containers + rosbridge
+# All image names must be updated to match your installed Isaac ROS versions.
+
+services:
+
+  isaac-ros-main:
+    image: nvcr.io/nvidia/isaac/ros:humble-isaac-ros-common
+    container_name: isaac-ros-main
+    runtime: nvidia
+    network_mode: host
+    environment:
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID}
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+    volumes:
+      - ${MC_URDF_REGISTRY_PATH}:/registry/urdf:ro
+      - ${MC_CONFIG_REGISTRY_PATH}:/registry/configs:ro
+      - ${MC_CALIBRATION_PATH}:/calibration:ro
+      - ${MC_BAG_STORAGE_PATH}:/bags
+      - ${MC_SCRIPT_REGISTRY_PATH}:/scripts:ro
+      - ./isaac/ros:/launch:ro
+    restart: unless-stopped
+    command: >
+      bash -c "
+        source /opt/ros/humble/setup.bash &&
+        ros2 launch rosbridge_server rosbridge_websocket_launch.xml
+          port:=${MC_ROSBRIDGE_PORT}
+      "
+
+  isaac-sim:
+    image: nvcr.io/nvidia/isaac-sim:latest
+    container_name: isaac-sim
+    runtime: nvidia
+    network_mode: host
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - ACCEPT_EULA=Y
+      - OMNI_USER=${OMNI_USER}
+      - OMNI_PASS=${OMNI_PASS}
+    volumes:
+      - ${MC_URDF_REGISTRY_PATH}:/registry/urdf:ro
+      - ${MC_USD_REGISTRY_PATH}:/registry/usd:ro
+      - ${MC_SCRIPT_REGISTRY_PATH}:/scripts:ro
+      - ${MC_ISAAC_SIM_WORKDIR}:/workdir
+      - ./isaac/sim:/configs:ro
+    restart: unless-stopped
+
+  isaac-lab:
+    image: nvcr.io/nvidia/isaac-lab:latest
+    container_name: isaac-lab
+    runtime: nvidia
+    network_mode: host
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+    volumes:
+      - ${MC_DATASET_PATH}:/datasets
+      - ${MC_MODEL_PATH}:/models
+      - ${MC_SCRIPT_REGISTRY_PATH}:/scripts:ro
+      - ${MC_ISAAC_LAB_WORKDIR}:/workdir
+      - ./isaac/lab:/configs:ro
+    restart: unless-stopped
+
+  # Future — stub service definitions
+  groot:
+    image: nvcr.io/nvidia/groot:latest
+    container_name: groot
+    runtime: nvidia
+    network_mode: host
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    profiles:
+      - future
+    restart: unless-stopped
+
+  cosmos:
+    image: nvcr.io/nvidia/cosmos:latest
+    container_name: cosmos
+    runtime: nvidia
+    network_mode: host
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    profiles:
+      - future
+    restart: unless-stopped
+
+  # Mission Control PostgreSQL
+  postgres:
+    image: postgres:16-alpine
+    container_name: mc-postgres
+    environment:
+      - POSTGRES_USER=${MC_DB_USER}
+      - POSTGRES_PASSWORD=${MC_DB_PASSWORD}
+      - POSTGRES_MULTIPLE_DATABASES=empirical,registry
+    volumes:
+      - mc-postgres-data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "${MC_DB_PORT}:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${MC_DB_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mc-postgres-data:

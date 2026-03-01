@@ -1,0 +1,53 @@
+[project]
+name = "mission-control"
+version = "3.0.0"
+description = "Cinema Robot Digital Twin — Mission Control Orchestration System"
+requires-python = ">=3.11"
+
+# All versions pinned exactly. No >= or ~= ranges.
+# Source: GUARDRAILS.md L3-R5
+dependencies = [
+    "fastapi==0.115.6",
+    "uvicorn==0.32.1",
+    "sqlalchemy==2.0.36",
+    "alembic==1.14.0",
+    "asyncpg==0.30.0",
+    "pydantic==2.10.3",
+    "pydantic-settings==2.7.0",
+    "httpx==0.28.1",
+    "websockets==14.1",
+    "structlog==24.4.0",
+    "anthropic==0.40.0",
+    "python-dotenv==1.0.1",
+    "aiofiles==24.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==8.3.4",
+    "pytest-asyncio==0.24.0",
+    "pytest-cov==6.0.0",
+    "ruff==0.8.4",
+    "mypy==1.13.0",
+    "pre-commit==4.0.1",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+select = ["E", "F", "I", "N", "UP", "ANN", "ASYNC"]
+ignore = ["ANN101", "ANN102"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+ignore_missing_imports = false
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests", "evals"]
+python_files = ["test_*.py", "*_test.py", "run_*.py"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

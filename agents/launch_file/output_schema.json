@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["status","agent","task_id","output_type","spec_version","guardrails_version","empirical_db_schema_version","generated_at","output","null_fields","confidence_scores","errors","warnings"],
+  "properties": {
+    "status": {"type": "string", "enum": ["ok","warn","failed"]},
+    "agent": {"type": "string"},
+    "task_id": {"type": "string"},
+    "output_type": {"type": "string"},
+    "spec_version": {"type": "string"},
+    "guardrails_version": {"type": "string"},
+    "empirical_db_schema_version": {"type": "string"},
+    "generated_at": {"type": "string"},
+    "output": {"type": "object"},
+    "output_summary": {"type": "string", "description": "Concise summary <=2000 tokens for orchestrator. Full artifact goes to registry."},
+    "null_fields": {"type": "array"},
+    "confidence_scores": {"type": "object", "description": "score: 0.0 (NULL) or 0.80-1.00 (verified). 0.01-0.79 is INVALID."},
+    "errors": {"type": "array"},
+    "warnings": {"type": "array"}
+  }
+}

@@ -1,0 +1,197 @@
+name: Mission Control CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ── Layer 1: Fast deterministic checks (no LLM) ────────────────────────────
+  deterministic:
+    name: Deterministic Integrity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Ruff lint
+        run: ruff check backend/ agents/ scripts/ evals/
+
+      - name: Type check
+        run: mypy backend/ agents/
+        continue-on-error: true  # Warn until type coverage is complete
+
+      - name: Import boundary check
+        run: python scripts/integrity/check_import_boundaries.py
+
+      - name: Dependency pinning check
+        run: python -c "
+import toml, sys
+cfg = toml.loads(open('pyproject.toml').read())
+deps = cfg.get('project', {}).get('dependencies', [])
+bad = [d for d in deps if any(op in d for op in ['>=','~=','<=','!=','^'])]
+if bad:
+    print('FAIL: Unpinned dependencies:', bad)
+    sys.exit(1)
+print('PASS: All dependencies pinned')
+"
+
+      - name: Anthropic practice audit
+        run: python scripts/enforce_practices.py --report
+
+      - name: Upload practice audit
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: practice-audit
+          path: docs/PRACTICE_AUDIT.md
+
+  # ── Layer 2: Unit tests ────────────────────────────────────────────────────
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: deterministic
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Run unit tests
+        run: pytest tests/unit/ -v --cov=backend --cov=agents --cov-report=xml
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
+
+  # ── Layer 3: Eval suite (golden cases — no LLM) ───────────────────────────
+  evals:
+    name: Eval Suite
+    runs-on: ubuntu-latest
+    needs: deterministic
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Run eval suite
+        run: python evals/runners/run_evals.py
+        # Regression: any previously-passing case now failing = build failure
+
+      - name: Eval report
+        if: failure()
+        run: python evals/runners/run_evals.py 2>&1 | tee eval_report.txt
+
+  # ── Layer 4: Prompt integrity ─────────────────────────────────────────────
+  prompt-integrity:
+    name: Prompt Integrity
+    runs-on: ubuntu-latest
+    needs: deterministic
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Module hash verification
+        run: |
+          python scripts/integrity/generate_module_hashes.py --verify-only
+          echo "All module hashes verified"
+
+      - name: Module version tag check
+        run: |
+          python -c "
+import re, sys
+from pathlib import Path
+pattern = re.compile(r'^# Version: \d+\.\d+\.\d+$')
+errors = []
+for f in Path('prompts').rglob('*.md'):
+    if f.name == 'SKILL.md':
+        continue
+    lines = f.read_text().split('\n')
+    if len(lines) < 3 or not pattern.match(lines[2].strip()):
+        errors.append(str(f))
+if errors:
+    print('FAIL: Missing version tags in:', errors)
+    sys.exit(1)
+print(f'PASS: {len(list(Path(\"prompts\").rglob(\"*.md\")))} modules all have version tags')
+"
+
+  # ── Layer 5: Claude headless review (runs on PRs only, costs tokens) ──────
+  claude-review:
+    name: Claude Headless Review
+    runs-on: ubuntu-latest
+    needs: [unit-tests, evals, prompt-integrity]
+    if: github.event_name == 'pull_request'
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history for diff
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Install Python dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Claude prompt module review
+        run: bash scripts/ci/claude_review.sh
+        # Source: anthropic.com/engineering/claude-code-best-practices
+        # Uses claude -p (headless mode) for subjective review
+
+      - name: Upload review output
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: claude-review
+          path: claude_review_output.txt
+
+  # ── Summary ──────────────────────────────────────────────────────────────
+  ci-summary:
+    name: CI Summary
+    runs-on: ubuntu-latest
+    needs: [deterministic, unit-tests, evals, prompt-integrity]
+    if: always()
+    steps:
+      - name: Check results
+        run: |
+          if [[ "${{ needs.deterministic.result }}" != "success" ]] || \
+             [[ "${{ needs.unit-tests.result }}" != "success" ]] || \
+             [[ "${{ needs.evals.result }}" != "success" ]] || \
+             [[ "${{ needs.prompt-integrity.result }}" != "success" ]]; then
+            echo "CI FAILED — see job details"
+            exit 1
+          fi
+          echo "CI PASSED — all checks green"

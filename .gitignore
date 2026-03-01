@@ -1,0 +1,62 @@
+# Environment — never commit real machine configs
+.env.machines
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+.uv/
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Frontend
+node_modules/
+frontend/dist/
+frontend/.next/
+frontend/build/
+*.tsbuildinfo
+
+# Registry (generated files — managed by File Agent, not Git)
+registry/urdf/*
+registry/usd/*
+registry/launch/*
+registry/sensor_configs/*
+registry/curob_configs/*
+registry/scene_configs/*
+registry/world_configs/*
+registry/scripts/*
+!registry/**/.gitkeep
+
+# Bag files (large binary — managed by Mission Control, not Git)
+*.bag
+*.mcap
+*.db3
+
+# IDE
+.vscode/settings.json
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Models (large binary — managed by Mission Control model registry)
+*.pt
+*.pth
+*.onnx
+*.engine
+
+# Workflows — YAML exports ARE committed (version controlled)
+# !workflows/**/*.yaml  ← already tracked, no rule needed

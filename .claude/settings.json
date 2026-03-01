@@ -1,0 +1,39 @@
+{
+  "_comment": "Claude Code tool allowlist — pre-approved safe operations. High-risk ops require session approval.",
+  "_source": "anthropic.com/engineering/claude-code-best-practices: curate allowed tools",
+  "permissions": {
+    "allow": [
+      "Edit",
+      "Read",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git checkout:*)",
+      "Bash(git worktree:*)",
+      "Bash(python evals/runners/run_evals.py:*)",
+      "Bash(python scripts/integrity/run_ci_checks.py:*)",
+      "Bash(python scripts/integrity/generate_module_hashes.py:*)",
+      "Bash(python scripts/integrity/check_import_boundaries.py:*)",
+      "Bash(python scripts/enforce_practices.py:*)",
+      "Bash(python -m pytest tests/:*)",
+      "Bash(docker compose ps:*)",
+      "Bash(docker compose logs:*)"
+    ],
+    "deny": [
+      "Bash(docker exec:*)",
+      "Bash(docker run:*)",
+      "Bash(docker rm:*)",
+      "Bash(psql:*)",
+      "Bash(alembic upgrade:*)",
+      "Bash(rm -rf:*)"
+    ]
+  },
+  "notes": {
+    "docker_exec": "Use Container Agent MCP tool instead",
+    "psql": "Use DB Agent MCP tool instead",
+    "alembic": "Run manually — requires operator review of migration",
+    "rm_rf": "Destructive — always requires explicit session approval"
+  }
+}

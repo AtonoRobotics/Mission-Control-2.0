@@ -10,6 +10,8 @@ files:
   - sim_scene.md
   - lab_training.md
   - ros_topology.md
+  - urdf_import.md
+  - usd_schema.md
 ---
 
 # Isaac Pipeline Skill
@@ -22,6 +24,8 @@ Load `containers.md` when: any question about which container runs what.
 Load `sim_scene.md` when: Isaac Sim USD stage setup, scene configuration.
 Load `lab_training.md` when: Isaac Lab RL environment or training configuration.
 Load `ros_topology.md` when: ROS2 node graph, topic names, TF frames, rosbridge.
+Load `urdf_import.md` when: importing URDF into Isaac Sim 5.1 via the asset importer API.
+Load `usd_schema.md` when: working with USD robot prims, schema conventions, or stage hierarchy.
 
 ## Core invariants (always apply when this skill is active)
 

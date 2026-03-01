@@ -9,6 +9,7 @@ files:
   - role_definition.md
   - config_parameters.md
   - forbidden_parameters.md
+  - reference.md
 ---
 
 # cuRobo Jerk Minimization Skill
@@ -24,6 +25,7 @@ This is not path planning. This is not obstacle avoidance. This is not collision
 Load `role_definition.md` for the full scope boundary.
 Load `config_parameters.md` when writing cuRobo YAML configs.
 Load `forbidden_parameters.md` when validating cuRobo output — any forbidden param = FAIL.
+Load `reference.md` when writing or reviewing cuRobo YAML configs — full schema reference.
 
 ## Why this matters
 

@@ -65,7 +65,14 @@ Use **"think hard"** before architectural decisions. Use **"ultrathink"** for va
 5. **IMPORTANT: context budget** — check `backend/core/context_budget.py` limits before loading modules.
 
 ## Context management (Anthropic: context engineering)
-- Load domain skills ON DEMAND via SKILL.md triggers — not pre-loaded
+- Load domain skills ON DEMAND via SKILL.md triggers — not pre-loaded:
+  - `prompts/skills/groot/SKILL.md` — GR00T N1.6 training, fine-tuning, Mimic/Dreams synthetic data
+  - `prompts/skills/cosmos/SKILL.md` — Cosmos-Predict2.5 world model, Transfer2.5 sim2real
+  - `prompts/skills/ecosystem/SKILL.md` — LeRobot datasets, NeMo Curator, cross-stack tools
+  - `prompts/skills/curob_jerk/SKILL.md` — cuRobo jerk minimization config and validation
+  - `prompts/skills/isaac_pipeline/SKILL.md` — Isaac Sim/Lab/ROS containers, URDF import, USD schema
+  - `prompts/skills/cinema_robot_domain/SKILL.md` — 6-axis cinema arm geometry, FIZ axes, artifacts
+  Read the matching SKILL.md BEFORE writing any code in that domain. It defines scope and invariants.
 - For tasks > 10 tool calls: maintain `NOTES.md` at project root
 - On context pressure: call `compaction.build_compaction_prompt()` to summarize
 - Sub-agent summaries: ≤ 2,000 tokens — explore extensively, return concisely

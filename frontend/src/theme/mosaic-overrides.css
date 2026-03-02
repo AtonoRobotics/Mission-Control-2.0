@@ -1,0 +1,63 @@
+/* Override react-mosaic Blueprint defaults with warm amber theme */
+
+.mosaic {
+  background: var(--bg-base) !important;
+}
+
+.mosaic-tile {
+  margin: 2px !important;
+}
+
+.mosaic-window {
+  border-radius: var(--radius-md) !important;
+  overflow: hidden;
+}
+
+.mosaic-window .mosaic-window-toolbar {
+  background: var(--bg-surface-1) !important;
+  border-bottom: 1px solid var(--border-default) !important;
+  height: 28px !important;
+  min-height: 28px !important;
+}
+
+.mosaic-window .mosaic-window-title {
+  color: var(--text-secondary) !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.5px !important;
+}
+
+.mosaic-window .mosaic-window-body {
+  background: var(--bg-surface-1) !important;
+}
+
+.mosaic-window .mosaic-window-controls .mosaic-default-control {
+  color: var(--text-muted) !important;
+}
+
+.mosaic-window .mosaic-window-controls .mosaic-default-control:hover {
+  color: var(--accent) !important;
+}
+
+.mosaic-split {
+  background: transparent !important;
+}
+
+.mosaic-split:hover {
+  background: var(--accent-dim) !important;
+}
+
+.mosaic-split.-row {
+  margin: 0 -2px !important;
+  width: 4px !important;
+}
+
+.mosaic-split.-column {
+  margin: -2px 0 !important;
+  height: 4px !important;
+}
+
+.bp5-dark {
+  background: transparent !important;
+}

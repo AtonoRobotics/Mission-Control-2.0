@@ -1,43 +1,18 @@
-/**
- * Mission Control — useRosBridge Hook
- * Manages WebSocket connection to rosbridge running inside isaac-ros-main container.
- * ROS2 is never installed locally — this is the exclusive ROS2 interface in the UI.
- */
-
-import { useEffect, useRef, useCallback } from 'react';
-import ROSLIB from 'roslibjs';
-import { useRosBridgeStore } from '../store/rosBridgeStore';
+import { useEffect, useCallback } from 'react';
+import { Topic, Service } from 'roslib';
+import { getRos, getStatus, onStatusChange, connect } from '@/ros/connection';
+import { useRosBridgeStore } from '@/stores/rosBridgeStore';
 
 export function useRosBridge() {
-  const rosRef = useRef<ROSLIB.Ros | null>(null);
-  const { setConnected, setError } = useRosBridgeStore();
+  const setStatus = useRosBridgeStore((s) => s.setStatus);
 
   useEffect(() => {
-    const wsUrl = `ws://${window.location.hostname}:${import.meta.env.VITE_ROSBRIDGE_PORT}`;
+    connect();
+    setStatus(getStatus());
+    return onStatusChange(setStatus);
+  }, [setStatus]);
 
-    const ros = new ROSLIB.Ros({ url: wsUrl });
-    rosRef.current = ros;
-
-    ros.on('connection', () => {
-      setConnected(true);
-      setError(null);
-    });
-
-    ros.on('error', (error: Error) => {
-      setConnected(false);
-      setError(error.message);
-    });
-
-    ros.on('close', () => {
-      setConnected(false);
-    });
-
-    return () => {
-      ros.close();
-    };
-  }, [setConnected, setError]);
-
-  return rosRef;
+  return getRos();
 }
 
 export function useTopic<T = Record<string, unknown>>(
@@ -46,52 +21,43 @@ export function useTopic<T = Record<string, unknown>>(
   onMessage: (msg: T) => void,
   throttleRate = 0,
 ) {
-  const rosRef = useRosBridge();
-  const onMessageRef = useRef(onMessage);
-  onMessageRef.current = onMessage;
+  const ros = useRosBridge();
 
   useEffect(() => {
-    if (!rosRef.current) return;
+    if (!topicName || !messageType) return;
 
-    const topic = new ROSLIB.Topic({
-      ros: rosRef.current,
+    const topic = new Topic({
+      ros,
       name: topicName,
       messageType,
       throttle_rate: throttleRate,
     });
 
-    topic.subscribe((message) => {
-      onMessageRef.current(message as T);
-    });
+    const handler = (msg: any) => onMessage(msg as T);
+    topic.subscribe(handler);
 
-    return () => {
-      topic.unsubscribe();
-    };
-  }, [topicName, messageType, throttleRate]);
+    return () => { topic.unsubscribe(); };
+  }, [ros, topicName, messageType, throttleRate]);
 }
 
 export function useServiceCall(serviceName: string, serviceType: string) {
-  const rosRef = useRosBridge();
+  const ros = useRosBridge();
 
   return useCallback(
     (request: Record<string, unknown>): Promise<Record<string, unknown>> => {
       return new Promise((resolve, reject) => {
-        if (!rosRef.current) {
-          reject(new Error('RosBridge not connected'));
-          return;
-        }
-        const service = new ROSLIB.Service({
-          ros: rosRef.current,
+        const service = new Service({
+          ros,
           name: serviceName,
           serviceType,
         });
         service.callService(
-          new ROSLIB.ServiceRequest(request),
-          (result) => resolve(result as Record<string, unknown>),
-          (error) => reject(new Error(error)),
+          request,
+          (result: any) => resolve(result as Record<string, unknown>),
+          (error: string) => reject(new Error(error)),
         );
       });
     },
-    [serviceName, serviceType],
+    [ros, serviceName, serviceType],
   );
 }

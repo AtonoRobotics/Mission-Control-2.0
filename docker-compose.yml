@@ -5,27 +5,27 @@
 services:
 
   isaac-ros-main:
-    image: nvcr.io/nvidia/isaac/ros:humble-isaac-ros-common
-    container_name: isaac-ros-main
+    image: isaac-ros-jazzy-4.2:latest
+    container_name: isaac-ros-rosbridge
     runtime: nvidia
     network_mode: host
+    ipc: host
     environment:
-      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID}
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=all
     volumes:
-      - ${MC_URDF_REGISTRY_PATH}:/registry/urdf:ro
-      - ${MC_CONFIG_REGISTRY_PATH}:/registry/configs:ro
-      - ${MC_CALIBRATION_PATH}:/calibration:ro
-      - ${MC_BAG_STORAGE_PATH}:/bags
-      - ${MC_SCRIPT_REGISTRY_PATH}:/scripts:ro
+      - /home/samuel/dobot_cr10:/workspace/dobot_cr10:ro
+      - ${MC_URDF_REGISTRY_PATH:-./registry/urdf}:/registry/urdf:ro
+      - ${MC_CONFIG_REGISTRY_PATH:-./registry/configs}:/registry/configs:ro
       - ./isaac/ros:/launch:ro
     restart: unless-stopped
     command: >
       bash -c "
-        source /opt/ros/humble/setup.bash &&
+        source /opt/ros/jazzy/setup.bash &&
+        apt-get update -qq && apt-get install -y -qq ros-jazzy-rosbridge-server >/dev/null 2>&1 &&
         ros2 launch rosbridge_server rosbridge_websocket_launch.xml
-          port:=${MC_ROSBRIDGE_PORT}
+          port:=${MC_ROSBRIDGE_PORT:-9090}
       "
 
   isaac-sim:

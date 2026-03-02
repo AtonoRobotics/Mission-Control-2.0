@@ -1,0 +1,23 @@
+[Unit]
+Description=Isaac ROS Rosbridge (Jazzy)
+Documentation=https://github.com/NVIDIA-ISAAC-ROS
+After=docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=samuel
+Environment=MC_ROSBRIDGE_PORT=9090
+Environment=ROS_DOMAIN_ID=0
+ExecStart=/home/samuel/mission-control/scripts/isaac-ros-start.sh
+ExecStop=/home/samuel/mission-control/scripts/isaac-ros-stop.sh
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=300
+TimeoutStopSec=30
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

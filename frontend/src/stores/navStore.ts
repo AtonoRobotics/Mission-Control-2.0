@@ -1,0 +1,22 @@
+import { create } from 'zustand';
+
+export type PageId =
+  | 'overview'
+  | 'viewer3d'
+  | 'actionGraph'
+  | 'rqtGraph'
+  | 'fleet'
+  | 'agents'
+  | 'infrastructure'
+  | 'registry'
+  | 'workflows';
+
+interface NavState {
+  activePage: PageId;
+  setPage: (page: PageId) => void;
+}
+
+export const useNavStore = create<NavState>((set) => ({
+  activePage: 'overview',
+  setPage: (page) => set({ activePage: page }),
+}));

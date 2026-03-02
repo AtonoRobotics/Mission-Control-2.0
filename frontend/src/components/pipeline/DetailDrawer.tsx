@@ -5,6 +5,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { PipelineNode, NodeResult } from '../../stores/pipelineStore';
+import type { ScenePlacement } from '@/stores/sceneStore';
 
 // --- Props ---
 
@@ -13,6 +14,9 @@ export interface DetailDrawerProps {
   nodeResult?: NodeResult;
   onConfigChange: (nodeId: string, config: Record<string, unknown>) => void;
   onClose: () => void;
+  scenePlacement?: ScenePlacement | null;
+  onUpdateScenePlacement?: (id: string, updates: Partial<ScenePlacement>) => void;
+  onRemoveScenePlacement?: (id: string) => void;
 }
 
 // --- Constants ---
@@ -667,6 +671,147 @@ function ProgressBar({ progress }: { progress: number }) {
   );
 }
 
+// --- Scene Placement detail view ---
+
+function ScenePlacementDetail({
+  placement,
+  onUpdate,
+  onRemove,
+}: {
+  placement: ScenePlacement;
+  onUpdate: (id: string, updates: Partial<ScenePlacement>) => void;
+  onRemove: (id: string) => void;
+}) {
+  const updatePosition = useCallback(
+    (axis: 'x' | 'y' | 'z', value: number) => {
+      onUpdate(placement.id, { position: { ...placement.position, [axis]: value } });
+    },
+    [placement.id, placement.position, onUpdate],
+  );
+
+  const updateRotation = useCallback(
+    (axis: 'x' | 'y' | 'z', value: number) => {
+      onUpdate(placement.id, { rotation: { ...placement.rotation, [axis]: value } });
+    },
+    [placement.id, placement.rotation, onUpdate],
+  );
+
+  const updateScale = useCallback(
+    (axis: 'x' | 'y' | 'z', value: number) => {
+      onUpdate(placement.id, { scale: { ...placement.scale, [axis]: value } });
+    },
+    [placement.id, placement.scale, onUpdate],
+  );
+
+  return (
+    <>
+      {/* Header */}
+      <div style={styles.section}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
+            <div
+              style={{
+                fontSize: 14,
+                fontWeight: 700,
+                color: 'var(--text-primary, #e0e0e0)',
+                marginBottom: 6,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+              title={placement.label}
+            >
+              {placement.label}
+            </div>
+            <TypeBadge type={placement.asset_type} variant="asset" />
+          </div>
+          <button
+            style={{
+              background: 'transparent',
+              border: '1px solid rgba(255, 68, 68, 0.4)',
+              borderRadius: 3,
+              color: '#ff4444',
+              fontSize: 10,
+              fontFamily: 'var(--font-mono, monospace)',
+              padding: '2px 8px',
+              cursor: 'pointer',
+              flexShrink: 0,
+            }}
+            onClick={() => onRemove(placement.id)}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255, 68, 68, 0.12)'; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+
+      {/* Transform */}
+      <SectionHeader>Transform</SectionHeader>
+      <div style={styles.section}>
+        <div style={styles.label}>Position</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4 }}>
+          <NumberField label="X" value={placement.position.x} step={0.01} onChange={(v) => updatePosition('x', v)} />
+          <NumberField label="Y" value={placement.position.y} step={0.01} onChange={(v) => updatePosition('y', v)} />
+          <NumberField label="Z" value={placement.position.z} step={0.01} onChange={(v) => updatePosition('z', v)} />
+        </div>
+        <div style={styles.label}>Rotation (&deg;)</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4 }}>
+          <NumberField label="X&deg;" value={placement.rotation.x} step={1} min={0} max={360} onChange={(v) => updateRotation('x', v)} />
+          <NumberField label="Y&deg;" value={placement.rotation.y} step={1} min={0} max={360} onChange={(v) => updateRotation('y', v)} />
+          <NumberField label="Z&deg;" value={placement.rotation.z} step={1} min={0} max={360} onChange={(v) => updateRotation('z', v)} />
+        </div>
+        <div style={styles.label}>Scale</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4 }}>
+          <NumberField label="X" value={placement.scale.x} step={0.1} onChange={(v) => updateScale('x', v)} />
+          <NumberField label="Y" value={placement.scale.y} step={0.1} onChange={(v) => updateScale('y', v)} />
+          <NumberField label="Z" value={placement.scale.z} step={0.1} onChange={(v) => updateScale('z', v)} />
+        </div>
+      </div>
+
+      {/* Physics */}
+      <SectionHeader>Physics</SectionHeader>
+      <div style={styles.section}>
+        <CheckboxField
+          label="Physics Enabled"
+          checked={placement.physics_enabled}
+          onChange={(v) => onUpdate(placement.id, { physics_enabled: v })}
+        />
+        <CheckboxField
+          label="Is Global"
+          checked={placement.is_global}
+          onChange={(v) => onUpdate(placement.id, { is_global: v })}
+        />
+        <div style={{ fontSize: 9, color: 'var(--text-muted, #666666)', marginTop: -4, marginLeft: 22 }}>
+          Shared across all environments (not cloned per env)
+        </div>
+      </div>
+
+      {/* Info */}
+      <SectionHeader>Info</SectionHeader>
+      <div style={styles.section}>
+        <div style={styles.kvRow}>
+          <span style={styles.kvKey}>asset source</span>
+          <span style={styles.kvVal as React.CSSProperties}>{placement.asset_source}</span>
+        </div>
+        <div style={styles.kvRow}>
+          <span style={styles.kvKey}>asset id</span>
+          <span
+            style={{
+              ...(styles.kvVal as React.CSSProperties),
+              fontFamily: 'var(--font-mono, monospace)',
+              fontSize: 10,
+            }}
+            title={placement.asset_id}
+          >
+            {placement.asset_id}
+          </span>
+        </div>
+      </div>
+    </>
+  );
+}
+
 // --- Main component ---
 
 export default function DetailDrawer({
@@ -674,7 +819,32 @@ export default function DetailDrawer({
   nodeResult,
   onConfigChange,
   onClose,
+  scenePlacement,
+  onUpdateScenePlacement,
+  onRemoveScenePlacement,
 }: DetailDrawerProps) {
+  // Show placement detail if a scene placement is selected (takes priority over node)
+  if (scenePlacement && onUpdateScenePlacement && onRemoveScenePlacement) {
+    return (
+      <div style={styles.drawer}>
+        <button
+          style={styles.closeBtn}
+          onClick={onClose}
+          title="Close detail drawer"
+          onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = '#e0e0e0'; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted, #666666)'; }}
+        >
+          &#x2715;
+        </button>
+        <ScenePlacementDetail
+          placement={scenePlacement}
+          onUpdate={onUpdateScenePlacement}
+          onRemove={onRemoveScenePlacement}
+        />
+      </div>
+    );
+  }
+
   if (!node) return null;
 
   const isAsset = node.category === 'asset';

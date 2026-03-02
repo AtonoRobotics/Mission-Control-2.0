@@ -4,6 +4,8 @@ Physical AI Pipeline CRUD, run lifecycle.
 Reuses workflow_graphs and workflow_runs DB tables.
 """
 
+import uuid
+
 from datetime import datetime
 from enum import Enum
 from typing import Optional
@@ -209,6 +211,154 @@ async def instantiate_template(
         template=template_id,
     )
     return graph
+
+
+# =============================================================================
+# AI Scene Generation (before parameterized {graph_id} routes)
+# =============================================================================
+
+
+class SceneGenerateRequest(BaseModel):
+    prompt: str
+    task_type: str  # manipulation, navigation, inspection, data_collection
+    robot_id: str
+    environment_style: Optional[str] = "grid"
+
+
+class SceneGenerateResponse(BaseModel):
+    name: str
+    description: Optional[str] = None
+    physics_dt: float = 1 / 60
+    render_dt: float = 1 / 60
+    gravity: list[float] = Field(default_factory=lambda: [0, 0, -9.81])
+    num_envs: Optional[int] = None
+    env_spacing: Optional[float] = None
+    placements: list[dict]
+
+
+@router.post("/scenes/generate", response_model=SceneGenerateResponse)
+async def generate_scene(
+    body: SceneGenerateRequest,
+    session: AsyncSession = Depends(get_registry_session),
+):
+    """AI scene generation — dispatches to simulate agent.
+    For now, returns a template-based scene layout.
+    """
+    from db.registry.models import Robot
+    result = await session.execute(
+        select(Robot).where(Robot.robot_id == body.robot_id)
+    )
+    robot = result.scalar_one_or_none()
+    reach_m = (robot.reach_mm / 1000) if robot and robot.reach_mm else 1.0
+
+    placements = []
+
+    # Always add the robot at origin
+    placements.append({
+        "id": str(uuid.uuid4()),
+        "asset_id": body.robot_id,
+        "asset_source": "registry",
+        "asset_type": "robot",
+        "label": robot.name if robot else body.robot_id,
+        "position": {"x": 0, "y": 0, "z": 0},
+        "rotation": {"x": 0, "y": 0, "z": 0},
+        "scale": {"x": 1, "y": 1, "z": 1},
+        "physics_enabled": True,
+        "is_global": False,
+        "properties": {},
+    })
+
+    if body.task_type == "manipulation":
+        placements.append({
+            "id": str(uuid.uuid4()),
+            "asset_id": "nvidia_table",
+            "asset_source": "nvidia",
+            "asset_type": "object",
+            "label": "Table",
+            "position": {"x": reach_m * 0.5, "y": 0, "z": 0},
+            "rotation": {"x": 0, "y": 0, "z": 0},
+            "scale": {"x": 1, "y": 1, "z": 1},
+            "physics_enabled": False,
+            "is_global": False,
+            "properties": {},
+        })
+        obj_names = ["Box", "Mug", "Banana"]
+        for i, name in enumerate(obj_names):
+            placements.append({
+                "id": str(uuid.uuid4()),
+                "asset_id": f"nvidia_{name.lower()}",
+                "asset_source": "nvidia",
+                "asset_type": "object",
+                "label": name,
+                "position": {
+                    "x": reach_m * 0.4 + 0.1 * (i - 1),
+                    "y": 0.15 * (i - 1),
+                    "z": 0.75,
+                },
+                "rotation": {"x": 0, "y": 0, "z": 0},
+                "scale": {"x": 1, "y": 1, "z": 1},
+                "physics_enabled": True,
+                "is_global": False,
+                "properties": {},
+            })
+    elif body.task_type == "navigation":
+        for i in range(5):
+            placements.append({
+                "id": str(uuid.uuid4()),
+                "asset_id": "nvidia_cardbox_a",
+                "asset_source": "nvidia",
+                "asset_type": "object",
+                "label": f"Obstacle {i+1}",
+                "position": {
+                    "x": (i % 3 - 1) * 2.0,
+                    "y": (i // 3 - 1) * 2.0,
+                    "z": 0,
+                },
+                "rotation": {"x": 0, "y": 0, "z": 0},
+                "scale": {"x": 1, "y": 1, "z": 1},
+                "physics_enabled": False,
+                "is_global": False,
+                "properties": {},
+            })
+
+    # Add overhead camera
+    placements.append({
+        "id": str(uuid.uuid4()),
+        "asset_id": "nvidia_camera",
+        "asset_source": "nvidia",
+        "asset_type": "sensor",
+        "label": "Overhead Camera",
+        "position": {"x": 0, "y": 0, "z": 2.0},
+        "rotation": {"x": -90, "y": 0, "z": 0},
+        "scale": {"x": 1, "y": 1, "z": 1},
+        "physics_enabled": False,
+        "is_global": True,
+        "properties": {"resolution": [640, 480], "fov": 60},
+    })
+
+    # Add dome light
+    placements.append({
+        "id": str(uuid.uuid4()),
+        "asset_id": "nvidia_dome_light",
+        "asset_source": "nvidia",
+        "asset_type": "light",
+        "label": "Dome Light",
+        "position": {"x": 0, "y": 0, "z": 3.0},
+        "rotation": {"x": 0, "y": 0, "z": 0},
+        "scale": {"x": 1, "y": 1, "z": 1},
+        "physics_enabled": False,
+        "is_global": True,
+        "properties": {"intensity": 3000},
+    })
+
+    scene_name = f"{body.task_type.replace('_', ' ').title()} Scene"
+    return SceneGenerateResponse(
+        name=scene_name,
+        description=f"Auto-generated {body.task_type} scene for {body.robot_id}. {body.prompt}",
+        placements=placements,
+        num_envs=32 if body.task_type in ("manipulation", "navigation") else None,
+        env_spacing=2.5 if body.task_type in ("manipulation", "navigation") else None,
+    )
 
 
 # =============================================================================

@@ -5,6 +5,9 @@ import PipelineCanvas from '@/components/pipeline/PipelineCanvas';
 import DetailDrawer from '@/components/pipeline/DetailDrawer';
 import RunBar from '@/components/pipeline/RunBar';
 import YamlEditor from '@/components/pipeline/YamlEditor';
+import SceneCanvas from '@/components/pipeline/SceneCanvas';
+import AssetBrowser from '@/components/pipeline/AssetBrowser';
+import { useSceneStore } from '@/stores/sceneStore';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -254,22 +257,38 @@ function TemplateGallery({
 // Editor Top Bar
 // ---------------------------------------------------------------------------
 
+type ViewMode = 'visual' | 'yaml' | 'scene';
+
 function EditorTopBar({
   pipeline,
   viewMode,
-  onToggleView,
+  onSetViewMode,
   onBack,
   onRun,
   running,
 }: {
   pipeline: Pipeline;
-  viewMode: 'visual' | 'yaml';
-  onToggleView: () => void;
+  viewMode: ViewMode;
+  onSetViewMode: (mode: ViewMode) => void;
   onBack: () => void;
   onRun: () => void;
   running: boolean;
 }) {
   const template = pipeline.graph_json?.template;
+
+  const modeButton = (mode: ViewMode, label: string) => (
+    <button
+      onClick={() => onSetViewMode(mode)}
+      style={{
+        background: viewMode === mode ? 'var(--accent)' : 'transparent',
+        color: viewMode === mode ? '#000' : 'var(--text-muted)',
+        border: 'none', cursor: 'pointer', fontSize: 10, fontWeight: 600,
+        padding: '4px 10px', transition: 'all 0.15s',
+      }}
+    >
+      {label}
+    </button>
+  );
 
   return (
     <div style={{
@@ -315,34 +334,32 @@ function EditorTopBar({
       {/* Spacer */}
       <div style={{ flex: 1 }} />
 
-      {/* Visual / YAML toggle */}
+      {/* View mode segment control */}
       <div style={{
         display: 'flex', borderRadius: 4, overflow: 'hidden',
         border: '1px solid var(--border-default)',
       }}>
-        <button
-          onClick={viewMode === 'yaml' ? onToggleView : undefined}
-          style={{
-            background: viewMode === 'visual' ? 'var(--accent)' : 'transparent',
-            color: viewMode === 'visual' ? '#000' : 'var(--text-muted)',
-            border: 'none', cursor: 'pointer', fontSize: 10, fontWeight: 600,
-            padding: '4px 10px', transition: 'all 0.15s',
-          }}
-        >
-          Visual
-        </button>
-        <button
-          onClick={viewMode === 'visual' ? onToggleView : undefined}
-          style={{
-            background: viewMode === 'yaml' ? 'var(--accent)' : 'transparent',
-            color: viewMode === 'yaml' ? '#000' : 'var(--text-muted)',
-            border: 'none', cursor: 'pointer', fontSize: 10, fontWeight: 600,
-            padding: '4px 10px', transition: 'all 0.15s',
-          }}
-        >
-          YAML
-        </button>
+        {modeButton('visual', 'Visual')}
+        {modeButton('scene', 'Scene')}
+        {modeButton('yaml', 'YAML')}
       </div>
+
+      {/* Generate button (scene mode only) */}
+      {viewMode === 'scene' && (
+        <button
+          onClick={() => console.log('[Scene] Generate clicked')}
+          style={{
+            background: 'transparent', border: '1px solid var(--accent)',
+            color: 'var(--accent)', borderRadius: 4, cursor: 'pointer',
+            fontSize: 10, fontWeight: 600, padding: '4px 10px',
+            transition: 'all 0.15s',
+          }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(255, 170, 0, 0.12)'; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+        >
+          Generate
+        </button>
+      )}
 
       {/* Run button */}
       <button
@@ -376,14 +393,16 @@ function PipelineEditor() {
     startRun,
   } = usePipelineStore();
 
-  const [viewMode, setViewMode] = useState<'visual' | 'yaml'>('visual');
+  const [viewMode, setViewMode] = useState<ViewMode>('visual');
+
+  const { sceneConfig, selectedPlacementId, selectPlacement, updatePlacement, addPlacement } = useSceneStore();
 
   const handleBack = useCallback(() => {
     clearActive();
   }, [clearActive]);
 
-  const handleToggleView = useCallback(() => {
-    setViewMode((m) => (m === 'visual' ? 'yaml' : 'visual'));
+  const handleSetViewMode = useCallback((mode: ViewMode) => {
+    setViewMode(mode);
   }, []);
 
   const handleRun = useCallback(async () => {
@@ -439,7 +458,7 @@ function PipelineEditor() {
       <EditorTopBar
         pipeline={activePipeline}
         viewMode={viewMode}
-        onToggleView={handleToggleView}
+        onSetViewMode={handleSetViewMode}
         onBack={handleBack}
         onRun={handleRun}
         running={isRunning}
@@ -449,7 +468,7 @@ function PipelineEditor() {
       <div style={{
         display: 'flex', flex: 1, overflow: 'hidden',
       }}>
-        {/* Left panel: Node palette (only in visual mode) */}
+        {/* Left panel: Node palette (visual) or Asset browser (scene) */}
         {viewMode === 'visual' && (
           <div style={{
             width: 240, flexShrink: 0, overflow: 'auto',
@@ -459,8 +478,17 @@ function PipelineEditor() {
             <NodePalette />
           </div>
         )}
+        {viewMode === 'scene' && (
+          <div style={{
+            width: 240, flexShrink: 0, overflow: 'auto',
+            borderRight: '1px solid var(--border-default)',
+            background: 'var(--bg-surface)',
+          }}>
+            <AssetBrowser />
+          </div>
+        )}
 
-        {/* Center: canvas or YAML editor */}
+        {/* Center: canvas, scene, or YAML editor */}
         <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
           {viewMode === 'visual' ? (
             <PipelineCanvas
@@ -470,6 +498,14 @@ function PipelineEditor() {
               selectedNodeId={selectedNodeId}
               runNodeResults={nodeResults}
             />
+          ) : viewMode === 'scene' ? (
+            <SceneCanvas
+              sceneConfig={sceneConfig}
+              selectedPlacementId={selectedPlacementId}
+              onSelectPlacement={selectPlacement}
+              onUpdatePlacement={updatePlacement}
+              onAddPlacement={addPlacement}
+            />
           ) : (
             <YamlEditor
               graphJson={graphJson}
@@ -478,8 +514,8 @@ function PipelineEditor() {
           )}
         </div>
 
-        {/* Right panel: Detail drawer (when a node is selected) */}
-        {selectedNode && (
+        {/* Right panel: Detail drawer (when a node or scene placement is selected) */}
+        {(selectedNode || (viewMode === 'scene' && selectedPlacementId)) && (
           <div style={{
             width: 320, flexShrink: 0, overflow: 'auto',
             borderLeft: '1px solid var(--border-default)',
@@ -490,6 +526,9 @@ function PipelineEditor() {
               nodeResult={selectedNodeResult}
               onConfigChange={handleConfigChange}
               onClose={handleCloseDrawer}
+              scenePlacement={viewMode === 'scene' ? sceneConfig.placements.find(p => p.id === selectedPlacementId) ?? null : null}
+              onUpdateScenePlacement={viewMode === 'scene' ? updatePlacement : undefined}
+              onRemoveScenePlacement={viewMode === 'scene' ? (id: string) => { useSceneStore.getState().removePlacement(id); selectPlacement(null); } : undefined}
             />
           </div>
         )}

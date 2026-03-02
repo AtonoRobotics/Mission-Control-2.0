@@ -18,7 +18,7 @@ logger = structlog.get_logger(__name__)
 # These must match the versions declared in their respective documents.
 # CI checks enforce consistency.
 
-SPEC_VERSION = "2.0.0"
+SPEC_VERSION = "2.1.0"
 GUARDRAILS_VERSION = "1.0.0"
 EMPIRICAL_DB_SCHEMA_VERSION = "3.1.0"
 

@@ -263,8 +263,13 @@ function GenerateModal({ onClose }: { onClose: () => void }) {
   const [taskType, setTaskType] = useState('manipulation');
   const [robotId, setRobotId] = useState('dobot_cr10');
 
+  const [validationMsg, setValidationMsg] = useState('');
   const handleGenerate = async () => {
-    if (!prompt.trim()) return;
+    if (!prompt.trim()) {
+      setValidationMsg('Enter a scene description');
+      return;
+    }
+    setValidationMsg('');
     await generateScene(prompt, taskType, robotId || undefined);
     if (!useSceneStore.getState().generateError) onClose();
   };
@@ -334,9 +339,9 @@ function GenerateModal({ onClose }: { onClose: () => void }) {
           </label>
         </div>
 
-        {generateError && (
+        {(generateError || validationMsg) && (
           <div style={{ color: '#ff4444', fontSize: 11, marginBottom: 12, padding: '6px 8px', background: 'rgba(255,68,68,0.1)', borderRadius: 4 }}>
-            {generateError}
+            {generateError || validationMsg}
           </div>
         )}
 
@@ -352,12 +357,12 @@ function GenerateModal({ onClose }: { onClose: () => void }) {
           </button>
           <button
             onClick={handleGenerate}
-            disabled={generating || !prompt.trim()}
+            disabled={generating}
             style={{
               background: 'var(--accent)', border: 'none', color: '#000',
               borderRadius: 4, padding: '6px 14px', fontSize: 11, fontWeight: 600,
-              cursor: generating || !prompt.trim() ? 'not-allowed' : 'pointer',
-              opacity: generating || !prompt.trim() ? 0.5 : 1,
+              cursor: generating ? 'not-allowed' : 'pointer',
+              opacity: generating ? 0.5 : 1,
             }}
           >
             {generating ? 'Generating...' : 'Generate'}

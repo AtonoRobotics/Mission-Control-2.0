@@ -25,6 +25,7 @@ import AgentsPage from '@/pages/AgentsPage';
 import InfraPage from '@/pages/InfraPage';
 import RegistryPage from '@/pages/RegistryPage';
 import WorkflowsPage from '@/pages/WorkflowsPage';
+import RobotsPage from '@/pages/RobotsPage';
 
 // Register all panels (for the 3D viewer mosaic)
 registerPanel({ id: 'viewport3d', title: '3D Viewport', component: Viewport3D });
@@ -44,6 +45,7 @@ const PAGE_COMPONENTS = {
   viewer3d: Viewer3DPage,
   rqtGraph: RQTGraphPage,
   actionGraph: ActionGraphPage,
+  robots: RobotsPage,
   fleet: FleetPage,
   agents: AgentsPage,
   infrastructure: InfraPage,

@@ -5,6 +5,7 @@ export type PageId =
   | 'viewer3d'
   | 'actionGraph'
   | 'rqtGraph'
+  | 'robots'
   | 'fleet'
   | 'agents'
   | 'infrastructure'

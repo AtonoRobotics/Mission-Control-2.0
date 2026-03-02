@@ -1,5 +1,10 @@
-import { useState, useEffect } from 'react';
-import { usePipelineStore, type Pipeline, type PipelineTemplate } from '@/stores/pipelineStore';
+import { useState, useEffect, useCallback } from 'react';
+import { usePipelineStore, type Pipeline, type PipelineTemplate, type PipelineGraphJson } from '@/stores/pipelineStore';
+import NodePalette from '@/components/pipeline/NodePalette';
+import PipelineCanvas from '@/components/pipeline/PipelineCanvas';
+import DetailDrawer from '@/components/pipeline/DetailDrawer';
+import RunBar from '@/components/pipeline/RunBar';
+import YamlEditor from '@/components/pipeline/YamlEditor';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -28,7 +33,7 @@ function Spinner() {
         borderTopColor: 'var(--accent)', borderRadius: '50%',
         animation: 'spin 0.7s linear infinite',
       }} />
-      Loading…
+      Loading...
     </div>
   );
 }
@@ -157,7 +162,7 @@ function TemplateGallery({
               cursor: 'pointer', fontSize: 16, padding: '4px 8px',
             }}
           >
-            ×
+            x
           </button>
         </div>
 
@@ -246,6 +251,259 @@ function TemplateGallery({
 }
 
 // ---------------------------------------------------------------------------
+// Editor Top Bar
+// ---------------------------------------------------------------------------
+
+function EditorTopBar({
+  pipeline,
+  viewMode,
+  onToggleView,
+  onBack,
+  onRun,
+  running,
+}: {
+  pipeline: Pipeline;
+  viewMode: 'visual' | 'yaml';
+  onToggleView: () => void;
+  onBack: () => void;
+  onRun: () => void;
+  running: boolean;
+}) {
+  const template = pipeline.graph_json?.template;
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 12,
+      padding: '8px 16px',
+      background: 'var(--bg-surface)',
+      borderBottom: '1px solid var(--border-default)',
+      flexShrink: 0, height: 44, boxSizing: 'border-box',
+    }}>
+      {/* Back button */}
+      <button
+        onClick={onBack}
+        style={{
+          background: 'none', border: 'none', color: 'var(--text-muted)',
+          cursor: 'pointer', fontSize: 12, padding: '4px 8px', borderRadius: 4,
+          transition: 'color 0.15s',
+        }}
+        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = 'var(--text-primary)'; }}
+        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = 'var(--text-muted)'; }}
+      >
+        &larr; Pipelines
+      </button>
+
+      {/* Divider */}
+      <div style={{ width: 1, height: 18, background: 'var(--border-default)' }} />
+
+      {/* Pipeline name */}
+      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+        {pipeline.name}
+      </span>
+
+      {/* Template badge */}
+      {template ? (
+        <span style={{
+          fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5,
+          background: 'var(--accent)', color: '#000', borderRadius: 99,
+          padding: '2px 8px', lineHeight: '14px',
+        }}>
+          {template}
+        </span>
+      ) : null}
+
+      {/* Spacer */}
+      <div style={{ flex: 1 }} />
+
+      {/* Visual / YAML toggle */}
+      <div style={{
+        display: 'flex', borderRadius: 4, overflow: 'hidden',
+        border: '1px solid var(--border-default)',
+      }}>
+        <button
+          onClick={viewMode === 'yaml' ? onToggleView : undefined}
+          style={{
+            background: viewMode === 'visual' ? 'var(--accent)' : 'transparent',
+            color: viewMode === 'visual' ? '#000' : 'var(--text-muted)',
+            border: 'none', cursor: 'pointer', fontSize: 10, fontWeight: 600,
+            padding: '4px 10px', transition: 'all 0.15s',
+          }}
+        >
+          Visual
+        </button>
+        <button
+          onClick={viewMode === 'visual' ? onToggleView : undefined}
+          style={{
+            background: viewMode === 'yaml' ? 'var(--accent)' : 'transparent',
+            color: viewMode === 'yaml' ? '#000' : 'var(--text-muted)',
+            border: 'none', cursor: 'pointer', fontSize: 10, fontWeight: 600,
+            padding: '4px 10px', transition: 'all 0.15s',
+          }}
+        >
+          YAML
+        </button>
+      </div>
+
+      {/* Run button */}
+      <button
+        className="btn-primary"
+        onClick={onRun}
+        disabled={running}
+        style={{
+          fontSize: 11, padding: '5px 14px', flexShrink: 0,
+          opacity: running ? 0.6 : 1, cursor: running ? 'not-allowed' : 'pointer',
+        }}
+      >
+        {running ? 'Running...' : 'Run Pipeline'}
+      </button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Pipeline Editor (full 3-panel layout)
+// ---------------------------------------------------------------------------
+
+function PipelineEditor() {
+  const {
+    activePipeline,
+    activePipelineLoading,
+    activeRun,
+    selectedNodeId,
+    selectNode,
+    clearActive,
+    updatePipeline,
+    startRun,
+  } = usePipelineStore();
+
+  const [viewMode, setViewMode] = useState<'visual' | 'yaml'>('visual');
+
+  const handleBack = useCallback(() => {
+    clearActive();
+  }, [clearActive]);
+
+  const handleToggleView = useCallback(() => {
+    setViewMode((m) => (m === 'visual' ? 'yaml' : 'visual'));
+  }, []);
+
+  const handleRun = useCallback(async () => {
+    if (!activePipeline) return;
+    await startRun(activePipeline.graph_id);
+  }, [activePipeline, startRun]);
+
+  const handleGraphChange = useCallback((graphJson: PipelineGraphJson) => {
+    if (!activePipeline) return;
+    updatePipeline(activePipeline.graph_id, { graph_json: graphJson });
+  }, [activePipeline, updatePipeline]);
+
+  const handleConfigChange = useCallback((nodeId: string, config: Record<string, unknown>) => {
+    if (!activePipeline) return;
+    const graphJson = activePipeline.graph_json;
+    const updatedNodes = graphJson.nodes.map((n) =>
+      n.id === nodeId ? { ...n, config } : n,
+    );
+    const updatedGraph: PipelineGraphJson = { ...graphJson, nodes: updatedNodes };
+    updatePipeline(activePipeline.graph_id, { graph_json: updatedGraph });
+  }, [activePipeline, updatePipeline]);
+
+  const handleCloseDrawer = useCallback(() => {
+    selectNode(null);
+  }, [selectNode]);
+
+  if (activePipelineLoading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+        <Spinner />
+      </div>
+    );
+  }
+
+  if (!activePipeline) return null;
+
+  const graphJson = activePipeline.graph_json;
+  const nodes = graphJson?.nodes ?? [];
+  const nodeResults = activeRun?.node_results ?? {};
+  const selectedNode = selectedNodeId
+    ? nodes.find((n) => n.id === selectedNodeId) ?? null
+    : null;
+  const selectedNodeResult = selectedNodeId ? nodeResults[selectedNodeId] : undefined;
+  const isRunning = activeRun != null && activeRun.status === 'running';
+
+  return (
+    <div style={{
+      display: 'flex', flexDirection: 'column',
+      height: 'calc(100vh - 48px)',
+      overflow: 'hidden',
+    }}>
+      {/* Top bar */}
+      <EditorTopBar
+        pipeline={activePipeline}
+        viewMode={viewMode}
+        onToggleView={handleToggleView}
+        onBack={handleBack}
+        onRun={handleRun}
+        running={isRunning}
+      />
+
+      {/* Main content area: palette + canvas/yaml + drawer */}
+      <div style={{
+        display: 'flex', flex: 1, overflow: 'hidden',
+      }}>
+        {/* Left panel: Node palette (only in visual mode) */}
+        {viewMode === 'visual' && (
+          <div style={{
+            width: 240, flexShrink: 0, overflow: 'auto',
+            borderRight: '1px solid var(--border-default)',
+            background: 'var(--bg-surface)',
+          }}>
+            <NodePalette />
+          </div>
+        )}
+
+        {/* Center: canvas or YAML editor */}
+        <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+          {viewMode === 'visual' ? (
+            <PipelineCanvas
+              graphJson={graphJson}
+              onGraphChange={handleGraphChange}
+              onNodeSelect={selectNode}
+              selectedNodeId={selectedNodeId}
+              runNodeResults={nodeResults}
+            />
+          ) : (
+            <YamlEditor
+              graphJson={graphJson}
+              onChange={handleGraphChange}
+            />
+          )}
+        </div>
+
+        {/* Right panel: Detail drawer (when a node is selected) */}
+        {selectedNode && (
+          <div style={{
+            width: 320, flexShrink: 0, overflow: 'auto',
+            borderLeft: '1px solid var(--border-default)',
+            background: 'var(--bg-surface)',
+          }}>
+            <DetailDrawer
+              node={selectedNode}
+              nodeResult={selectedNodeResult}
+              onConfigChange={handleConfigChange}
+              onClose={handleCloseDrawer}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Bottom: Run bar (when a run exists) */}
+      {activeRun && (
+        <RunBar run={activeRun} nodes={nodes} />
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main Page
 // ---------------------------------------------------------------------------
 
@@ -254,6 +512,7 @@ export default function PipelinesPage() {
     pipelines, pipelinesLoading, fetchPipelines,
     templates, templatesLoading, fetchTemplates,
     createPipeline, instantiateTemplate,
+    activePipeline, fetchPipeline,
   } = usePipelineStore();
 
   const [showGallery, setShowGallery] = useState(false);
@@ -263,21 +522,34 @@ export default function PipelinesPage() {
     fetchTemplates();
   }, [fetchPipelines, fetchTemplates]);
 
-  const handleOpenPipeline = (graphId: string) => {
-    // Task 10 will wire this to the pipeline editor
-    console.log('Open pipeline:', graphId);
-  };
+  const handleOpenPipeline = useCallback((graphId: string) => {
+    fetchPipeline(graphId);
+  }, [fetchPipeline]);
 
-  const handleSelectTemplate = async (templateId: string) => {
-    await instantiateTemplate(templateId);
+  const handleSelectTemplate = useCallback(async (templateId: string) => {
+    const pipeline = await instantiateTemplate(templateId);
     setShowGallery(false);
-  };
+    // Auto-open the new pipeline in editor mode
+    if (pipeline) {
+      fetchPipeline(pipeline.graph_id);
+    }
+  }, [instantiateTemplate, fetchPipeline]);
 
-  const handleBlankCanvas = async () => {
-    await createPipeline('Untitled Pipeline');
+  const handleBlankCanvas = useCallback(async () => {
+    const pipeline = await createPipeline('Untitled Pipeline');
     setShowGallery(false);
-  };
+    // Auto-open the new pipeline in editor mode
+    if (pipeline) {
+      fetchPipeline(pipeline.graph_id);
+    }
+  }, [createPipeline, fetchPipeline]);
 
+  // --- Editor mode ---
+  if (activePipeline) {
+    return <PipelineEditor />;
+  }
+
+  // --- List mode ---
   return (
     <div style={{ padding: '20px 24px', color: 'var(--text-primary)' }}>
       {/* Page header */}

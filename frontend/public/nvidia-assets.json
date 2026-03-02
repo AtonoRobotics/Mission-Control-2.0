@@ -1,0 +1,142 @@
+{
+  "version": "1.0",
+  "source": "Isaac Sim 5.1 Built-in Assets",
+  "categories": {
+    "environments": [
+      {
+        "id": "nvidia_env_simple_warehouse",
+        "label": "Simple Warehouse",
+        "path": "/Isaac/Environments/Simple_Warehouse/full_warehouse.usd",
+        "description": "Large open warehouse with shelving units and pallets. Ideal for mobile robot navigation and logistics tasks.",
+        "thumbnail": null
+      },
+      {
+        "id": "nvidia_env_grid_default",
+        "label": "Grid Default",
+        "path": "/Isaac/Environments/Grid/default_environment.usd",
+        "description": "Flat ground plane with a grid texture. Minimal environment for quick prototyping and testing.",
+        "thumbnail": null
+      },
+      {
+        "id": "nvidia_env_simple_room",
+        "label": "Simple Room",
+        "path": "/Isaac/Environments/Simple_Room/simple_room.usd",
+        "description": "Single enclosed room with basic walls, floor, and ceiling. Suitable for indoor manipulation tasks.",
+        "thumbnail": null
+      },
+      {
+        "id": "nvidia_env_hospital",
+        "label": "Hospital",
+        "path": "/Isaac/Environments/Hospital/hospital.usd",
+        "description": "Multi-room hospital floor layout with corridors, patient rooms, and nurse stations.",
+        "thumbnail": null
+      },
+      {
+        "id": "nvidia_env_office",
+        "label": "Office",
+        "path": "/Isaac/Environments/Office/office.usd",
+        "description": "Open-plan office environment with desks, chairs, and partition walls.",
+        "thumbnail": null
+      }
+    ],
+    "robots": [
+      {
+        "id": "nvidia_robot_franka_panda",
+        "label": "Franka Panda",
+        "path": "/Isaac/Robots/Franka/franka_alt_fingers.usd",
+        "description": "7-DOF collaborative robot arm with parallel-jaw gripper. Standard benchmark manipulator.",
+        "thumbnail": null
+      },
+      {
+        "id": "nvidia_robot_ur10",
+        "label": "Universal Robots UR10",
+        "path": "/Isaac/Robots/UniversalRobots/ur10/ur10.usd",
+        "description": "6-DOF industrial robot arm with 10kg payload capacity and 1300mm reach.",
+        "thumbnail": null
+      },
+      {
+        "id": "nvidia_robot_carter_v2",
+        "label": "Carter v2",
+        "path": "/Isaac/Robots/Carter/carter_v2.usd",
+        "description": "Differential-drive mobile robot platform with stereo cameras and lidar. Built for navigation research.",
+        "thumbnail": null
+      }
+    ],
+    "objects": [
+      {
+        "id": "nvidia_obj_ycb_cracker_box",
+        "label": "YCB Cracker Box",
+        "path": "/Isaac/Props/YCB/Axis_Aligned/003_cracker_box.usd",
+        "description": "YCB benchmark object — cracker box with realistic texture and physics properties.",
+        "thumbnail": null
+      },
+      {
+        "id": "nvidia_obj_ycb_mug",
+        "label": "YCB Mug",
+        "path": "/Isaac/Props/YCB/Axis_Aligned/025_mug.usd",
+        "description": "YCB benchmark object — standard coffee mug for grasp planning tasks.",
+        "thumbnail": null
+      },
+      {
+        "id": "nvidia_obj_ycb_banana",
+        "label": "YCB Banana",
+        "path": "/Isaac/Props/YCB/Axis_Aligned/011_banana.usd",
+        "description": "YCB benchmark object — banana with irregular geometry for grasp testing.",
+        "thumbnail": null
+      },
+      {
+        "id": "nvidia_obj_pallet",
+        "label": "Pallet",
+        "path": "/Isaac/Props/Warehouse/Pallets/pallet.usd",
+        "description": "Standard wooden pallet for warehouse and logistics simulation scenarios.",
+        "thumbnail": null
+      },
+      {
+        "id": "nvidia_obj_table",
+        "label": "Table",
+        "path": "/Isaac/Props/Furniture/Table/table.usd",
+        "description": "Simple rectangular table surface for tabletop manipulation experiments.",
+        "thumbnail": null
+      }
+    ],
+    "sensors": [
+      {
+        "id": "nvidia_sensor_pinhole_camera",
+        "label": "Pinhole Camera",
+        "path": "__builtin__/sensor/pinhole_camera",
+        "description": "Standard pinhole camera model with configurable resolution, FOV, and clipping planes.",
+        "thumbnail": null
+      },
+      {
+        "id": "nvidia_sensor_rotating_lidar",
+        "label": "Rotating Lidar",
+        "path": "__builtin__/sensor/rotating_lidar",
+        "description": "360-degree rotating lidar sensor with configurable beam count, range, and rotation rate.",
+        "thumbnail": null
+      }
+    ],
+    "lighting": [
+      {
+        "id": "nvidia_light_dome",
+        "label": "Dome Light",
+        "path": "__builtin__/light/dome_light",
+        "description": "Environment dome light providing ambient illumination from an HDR texture or solid color.",
+        "thumbnail": null
+      },
+      {
+        "id": "nvidia_light_distant",
+        "label": "Distant Light",
+        "path": "__builtin__/light/distant_light",
+        "description": "Directional light source simulating sunlight. Uniform parallel rays with configurable angle and intensity.",
+        "thumbnail": null
+      },
+      {
+        "id": "nvidia_light_sphere",
+        "label": "Sphere Light",
+        "path": "__builtin__/light/sphere_light",
+        "description": "Omnidirectional point light with configurable radius, intensity, and color temperature.",
+        "thumbnail": null
+      }
+    ]
+  }
+}

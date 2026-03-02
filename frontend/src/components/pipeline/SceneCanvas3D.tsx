@@ -284,6 +284,8 @@ export const SceneCanvas3D: React.FC<SceneCanvas3DProps> = ({
     // --- Left-click: select ---
     const onMouseDown = (e: MouseEvent) => {
       if (e.button === 0) {
+        // Ignore clicks inside the context menu overlay (let React handle them)
+        if ((e.target as HTMLElement).closest('[data-ctx-menu]')) return;
         setCtxMenuRef.current(null); // close context menu
         const id = raycastAsset(e);
         onSelectRef.current(id ?? null);
@@ -413,6 +415,7 @@ export const SceneCanvas3D: React.FC<SceneCanvas3DProps> = ({
       {ctxMenu && (
         <div
           ref={ctxMenuDivRef}
+          data-ctx-menu
           style={{
             position: 'absolute',
             left: ctxMenu.x,

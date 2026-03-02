@@ -35,17 +35,21 @@ class AgentLogOut(BaseModel):
     output: Optional[dict]
     error: Optional[str]
     duration_ms: Optional[float]
+    duration_s: Optional[float] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
 
+    def model_post_init(self, __context):
+        if self.duration_ms is not None and self.duration_s is None:
+            self.duration_s = round(self.duration_ms / 1000, 2)
+
 
 class AgentSummaryOut(BaseModel):
     agent_name: str
-    total: int
-    succeeded: int
-    failed: int
-    avg_duration_ms: Optional[float]
+    total_runs: int
+    success_rate: Optional[float]
+    avg_duration: Optional[float]
 
 
 # =============================================================================
@@ -112,10 +116,9 @@ async def agent_summary(
     return [
         AgentSummaryOut(
             agent_name=r.agent_name,
-            total=r.total,
-            succeeded=r.succeeded,
-            failed=r.failed,
-            avg_duration_ms=round(r.avg_duration_ms, 1) if r.avg_duration_ms else None,
+            total_runs=r.total,
+            success_rate=round(r.succeeded / r.total, 2) if r.total > 0 else None,
+            avg_duration=round(r.avg_duration_ms / 1000, 2) if r.avg_duration_ms else None,
         )
         for r in rows
     ]

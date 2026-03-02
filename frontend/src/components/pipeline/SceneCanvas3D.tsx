@@ -50,19 +50,21 @@ function createMeshForType(assetType: ScenePlacement['asset_type']): THREE.Mesh 
 }
 
 function applyPlacementTransform(mesh: THREE.Mesh, placement: ScenePlacement) {
-  mesh.position.set(placement.position.x, placement.position.y, placement.position.z);
+  // Scene data: x=right, y=forward, z=up. Three.js: x=right, y=up, z=forward.
+  // Swap y↔z so scene z (height) maps to Three.js y (up).
+  mesh.position.set(placement.position.x, placement.position.z, placement.position.y);
   // Environment planes already have a base rotation; add placement rotation on top
   if (placement.asset_type === 'environment') {
     mesh.rotation.set(
       -Math.PI / 2 + placement.rotation.x * DEG2RAD,
-      placement.rotation.y * DEG2RAD,
       placement.rotation.z * DEG2RAD,
+      placement.rotation.y * DEG2RAD,
     );
   } else {
     mesh.rotation.set(
       placement.rotation.x * DEG2RAD,
-      placement.rotation.y * DEG2RAD,
       placement.rotation.z * DEG2RAD,
+      placement.rotation.y * DEG2RAD,
     );
   }
 }
@@ -218,6 +220,8 @@ export const SceneCanvas3D: React.FC<SceneCanvas3DProps> = ({
       const hit = raycaster.ray.intersectPlane(GROUND_PLANE, intersection);
 
       if (hit) {
+        // Ground plane intersection is in Three.js coords (x, y=0, z).
+        // Map to scene coords: scene.x = three.x, scene.y = three.z (forward)
         onDropAsset(assetData, intersection.x, intersection.z);
       } else {
         // Fallback: use screen-space coordinates

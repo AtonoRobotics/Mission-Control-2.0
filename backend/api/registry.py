@@ -31,7 +31,7 @@ router = APIRouter()
 
 class FileCreate(BaseModel):
     file_type: str
-    robot_id: Optional[int] = None
+    robot_id: Optional[str] = None
     scene_id: Optional[UUID] = None
     version: str
     file_hash: str
@@ -44,7 +44,7 @@ class FileCreate(BaseModel):
 class FileOut(BaseModel):
     file_id: UUID
     file_type: str
-    robot_id: Optional[int]
+    robot_id: Optional[str]
     scene_id: Optional[UUID]
     version: str
     file_hash: str
@@ -126,7 +126,7 @@ class SceneUpdate(BaseModel):
 
 @router.get("/files", response_model=list[FileOut])
 async def list_files(
-    robot_id: Optional[int] = Query(None),
+    robot_id: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
     file_type: Optional[str] = Query(None),
     limit: int = Query(100, le=500),

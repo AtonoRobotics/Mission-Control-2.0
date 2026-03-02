@@ -52,8 +52,9 @@ export interface RegistryAsset {
   robot_id: string | null;
   file_type: string;
   file_path: string;
-  filename: string;
-  uploaded_at: string;
+  version: string;
+  status: string;
+  created_at: string;
 }
 
 // --- Defaults ---

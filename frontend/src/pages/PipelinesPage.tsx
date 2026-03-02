@@ -254,6 +254,121 @@ function TemplateGallery({
 }
 
 // ---------------------------------------------------------------------------
+// Generate Scene Modal
+// ---------------------------------------------------------------------------
+
+function GenerateModal({ onClose }: { onClose: () => void }) {
+  const { generateScene, generating, generateError } = useSceneStore();
+  const [prompt, setPrompt] = useState('');
+  const [taskType, setTaskType] = useState('manipulation');
+  const [robotId, setRobotId] = useState('dobot_cr10');
+
+  const handleGenerate = async () => {
+    if (!prompt.trim()) return;
+    await generateScene(prompt, taskType, robotId || undefined);
+    if (!useSceneStore.getState().generateError) onClose();
+  };
+
+  const taskTypes = ['manipulation', 'navigation', 'inspection', 'data_collection'];
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 9999,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
+    }} onClick={onClose}>
+      <div style={{
+        background: '#1a1a1a', border: '1px solid #333', borderRadius: 8,
+        padding: 24, width: 420, maxWidth: '90vw',
+        boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+      }} onClick={(e) => e.stopPropagation()}>
+        <h3 style={{ margin: '0 0 16px', fontSize: 14, fontWeight: 600, color: '#fff' }}>
+          Generate Scene
+        </h3>
+
+        <label style={{ display: 'block', marginBottom: 12 }}>
+          <span style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 4 }}>Prompt</span>
+          <textarea
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            placeholder="Describe the scene... e.g. 'Pick and place task with table and 3 cubes'"
+            rows={3}
+            style={{
+              width: '100%', background: '#0a0a0a', border: '1px solid #333',
+              borderRadius: 4, padding: 8, color: '#eee', fontSize: 12,
+              fontFamily: 'monospace', resize: 'vertical', boxSizing: 'border-box',
+            }}
+            autoFocus
+          />
+        </label>
+
+        <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
+          <label style={{ flex: 1 }}>
+            <span style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 4 }}>Task Type</span>
+            <select
+              value={taskType}
+              onChange={(e) => setTaskType(e.target.value)}
+              style={{
+                width: '100%', background: '#0a0a0a', border: '1px solid #333',
+                borderRadius: 4, padding: '6px 8px', color: '#eee', fontSize: 12,
+              }}
+            >
+              {taskTypes.map((t) => (
+                <option key={t} value={t}>{t.replace('_', ' ')}</option>
+              ))}
+            </select>
+          </label>
+
+          <label style={{ flex: 1 }}>
+            <span style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 4 }}>Robot ID</span>
+            <input
+              value={robotId}
+              onChange={(e) => setRobotId(e.target.value)}
+              placeholder="e.g. dobot_cr10"
+              style={{
+                width: '100%', background: '#0a0a0a', border: '1px solid #333',
+                borderRadius: 4, padding: '6px 8px', color: '#eee', fontSize: 12,
+                boxSizing: 'border-box',
+              }}
+            />
+          </label>
+        </div>
+
+        {generateError && (
+          <div style={{ color: '#ff4444', fontSize: 11, marginBottom: 12, padding: '6px 8px', background: 'rgba(255,68,68,0.1)', borderRadius: 4 }}>
+            {generateError}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'transparent', border: '1px solid #444', color: '#888',
+              borderRadius: 4, padding: '6px 14px', fontSize: 11, cursor: 'pointer',
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleGenerate}
+            disabled={generating || !prompt.trim()}
+            style={{
+              background: 'var(--accent)', border: 'none', color: '#000',
+              borderRadius: 4, padding: '6px 14px', fontSize: 11, fontWeight: 600,
+              cursor: generating || !prompt.trim() ? 'not-allowed' : 'pointer',
+              opacity: generating || !prompt.trim() ? 0.5 : 1,
+            }}
+          >
+            {generating ? 'Generating...' : 'Generate'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Editor Top Bar
 // ---------------------------------------------------------------------------
 
@@ -265,6 +380,7 @@ function EditorTopBar({
   onSetViewMode,
   onBack,
   onRun,
+  onGenerate,
   running,
 }: {
   pipeline: Pipeline;
@@ -272,6 +388,7 @@ function EditorTopBar({
   onSetViewMode: (mode: ViewMode) => void;
   onBack: () => void;
   onRun: () => void;
+  onGenerate: () => void;
   running: boolean;
 }) {
   const template = pipeline.graph_json?.template;
@@ -347,7 +464,7 @@ function EditorTopBar({
       {/* Generate button (scene mode only) */}
       {viewMode === 'scene' && (
         <button
-          onClick={() => console.log('[Scene] Generate clicked')}
+          onClick={onGenerate}
           style={{
             background: 'transparent', border: '1px solid var(--accent)',
             color: 'var(--accent)', borderRadius: 4, cursor: 'pointer',
@@ -394,6 +511,7 @@ function PipelineEditor() {
   } = usePipelineStore();
 
   const [viewMode, setViewMode] = useState<ViewMode>('visual');
+  const [showGenerateModal, setShowGenerateModal] = useState(false);
 
   const { sceneConfig, selectedPlacementId, selectPlacement, updatePlacement, addPlacement, removePlacement } = useSceneStore();
 
@@ -461,8 +579,13 @@ function PipelineEditor() {
         onSetViewMode={handleSetViewMode}
         onBack={handleBack}
         onRun={handleRun}
+        onGenerate={() => setShowGenerateModal(true)}
         running={isRunning}
       />
+
+      {showGenerateModal && (
+        <GenerateModal onClose={() => setShowGenerateModal(false)} />
+      )}
 
       {/* Main content area: palette + canvas/yaml + drawer */}
       <div style={{

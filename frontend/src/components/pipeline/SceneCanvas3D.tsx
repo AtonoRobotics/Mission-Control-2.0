@@ -192,10 +192,14 @@ export const SceneCanvas3D: React.FC<SceneCanvas3DProps> = ({
   const setCtxMenuRef = useRef(setCtxMenu);
   setCtxMenuRef.current = setCtxMenu;
 
-  // Close context menu on any left click
+  // Close context menu on any click outside of it
+  const ctxMenuDivRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!ctxMenu) return;
-    const close = () => setCtxMenu(null);
+    const close = (e: MouseEvent) => {
+      if (ctxMenuDivRef.current?.contains(e.target as Node)) return;
+      setCtxMenu(null);
+    };
     window.addEventListener('mousedown', close);
     return () => window.removeEventListener('mousedown', close);
   }, [ctxMenu]);
@@ -408,6 +412,7 @@ export const SceneCanvas3D: React.FC<SceneCanvas3DProps> = ({
       {/* Context menu overlay */}
       {ctxMenu && (
         <div
+          ref={ctxMenuDivRef}
           style={{
             position: 'absolute',
             left: ctxMenu.x,

@@ -9,6 +9,8 @@ from enum import Enum
 from typing import Optional
 from uuid import UUID
 
+import copy
+
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -18,6 +20,7 @@ from sqlalchemy.sql import func
 
 from db.registry.models import WorkflowGraph, WorkflowRun
 from db.session import get_registry_session
+from services.pipeline_templates import get_template, list_templates, TEMPLATE_META
 
 logger = structlog.get_logger(__name__)
 router = APIRouter()
@@ -325,3 +328,65 @@ async def update_pipeline_run(
     await session.refresh(run)
     logger.info("pipeline_run_updated", run_id=str(run_id), status=run.status)
     return run
+
+
+# =============================================================================
+# Pipeline Template Endpoints
+# =============================================================================
+
+
+class TemplateOut(BaseModel):
+    id: str
+    name: str
+    description: str
+    tags: list[str]
+    node_count: int
+    edge_count: int
+
+
+class TemplateInstantiateBody(BaseModel):
+    name: Optional[str] = None
+    created_by: Optional[str] = None
+
+
+@router.get("/templates", response_model=list[TemplateOut])
+async def get_templates():
+    """List all available pipeline templates."""
+    return list_templates()
+
+
+@router.post("/templates/{template_id}/instantiate", response_model=PipelineOut, status_code=201)
+async def instantiate_template(
+    template_id: str,
+    body: TemplateInstantiateBody = TemplateInstantiateBody(),
+    session: AsyncSession = Depends(get_registry_session),
+):
+    """Clone a template into a new WorkflowGraph row."""
+    tpl = get_template(template_id)
+    if tpl is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Template '{template_id}' not found. "
+            f"Available: {list(TEMPLATE_META.keys())}",
+        )
+
+    meta = TEMPLATE_META[template_id]
+    graph_name = body.name or f"{meta['name']} (from template)"
+    graph_json = copy.deepcopy(tpl)
+
+    graph = WorkflowGraph(
+        name=graph_name,
+        version="1.0.0",
+        description=meta["description"],
+        graph_json=graph_json,
+        created_by=body.created_by,
+    )
+    session.add(graph)
+    await session.flush()
+    await session.refresh(graph)
+    logger.info(
+        "pipeline_instantiated_from_template",
+        graph_id=str(graph.graph_id),
+        template=template_id,
+    )
+    return graph

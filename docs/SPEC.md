@@ -1,8 +1,8 @@
 # Mission Control — Infrastructure Specification
-**Version:** 2.0.0-draft
+**Version:** 2.1.0
 **Project:** Cinema Robot Digital Twin
 **Date:** 2026-03-01
-**Status:** Greenfield — pending 3 open decisions (see Section 16)
+**Status:** Active — v1 in development. Both databases live, all API routers implemented.
 
 ---
 
@@ -108,10 +108,10 @@ These two functions share one UI, one database, one auth system, and one backend
    │  Docker          │ │  5.1        │ │  PostgreSQL      │
    │  Containers      │ │  Isaac Lab  │ │  ┌────────────┐  │
    │  ┌─────────────┐ │ │  2.3        │ │  │Empirical   │  │
-   │  │ ROS2 Jazzy  │ │ └─────────────┘ │  │DB v3.1.0+  │  │
+   │  │ ROS2 Jazzy  │ │ └─────────────┘ │  │DB (6 tbl)  │  │
    │  │ nvblox      │ │                 │  ├────────────┤  │
    │  │ cuRobo      │ │                 │  │Registry DB │  │
-   │  │ ZED X nodes │ │                 │  │(new)       │  │
+   │  │ ZED X nodes │ │                 │  │(15 tbl)    │  │
    │  │ rosbridge   │ │                 │  └────────────┘  │
    │  └─────────────┘ │                 └─────────────────┘
    └──────────────────┘
@@ -229,21 +229,35 @@ ROS_DOMAIN_ID=0
 
 Two logically and physically separate PostgreSQL databases, co-located on `MC_HOST_PRIMARY`.
 
-### DB 1 — Empirical Database (existing v3.1.0, extended)
+### DB 1 — Empirical Database (v1.0.0 — live)
 
 Single source of truth for all robot physical properties. Read-only for all agents and services except the DB Admin Agent.
 
-- 29 joint columns, 41 link columns (existing schema)
-- Extended with: calibration_data table, sensor_specifications table
-- Never duplicated, never estimated — empirical values only
+**Tables:**
 
-### DB 2 — Mission Control Registry (new)
+```
+robots               — robot inventory (robot_id PK, dof, payload_kg, reach_mm, weight_kg, repeatability_mm)
+joint_specs          — per-joint physical properties (type, limits, damping, friction, parent/child links)
+link_specs           — per-link physical properties (mass, full inertia tensor, visual/collision meshes)
+collision_spheres    — cuRobo collision geometry (center xyz + radius per link per sphere_index)
+calibration_data     — sensor calibration records (JSONB data, calibration_type, sensor_id)
+sensor_specs         — sensor hardware specs (type, model, mount offset, intrinsics/extrinsics JSONB)
+```
+
+- All physical fields nullable — NULL = unverified per GUARDRAILS L1-R3
+- Unique constraints: (robot_id, joint_name), (robot_id, link_name), (robot_id, link_name, sphere_index)
+- CR10 seeded: 1 robot, 8 joints, 9 links, 24 collision spheres (calibration/sensor empty — correct NULL)
+- Never duplicated, never estimated — empirical values only
+- Alembic migrations: `database/empirical/` (separate from registry)
+
+### DB 2 — Mission Control Registry (live — 15 tables)
 
 Tracks all artifacts, builds, sessions, and workflow state.
 
 **Tables:**
 
 ```
+file_registry        — versioned config files with status lifecycle (draft→validated→promoted→deprecated)
 robots               — robot inventory, links to empirical DB by robot_id
 urdf_registry        — canonical URDF versions per robot, build history, status
 usd_registry         — USD assets, conversion history
@@ -791,9 +805,9 @@ All ROS2 communication flows through rosbridge WebSocket running inside the Isaa
 - Mission Control monitors: process status, topic bridge health, joint state sync
 
 ### Isaac Lab 2.3
-- Scope in v1: see Open Decision OD-03
+- **Fully in scope for v1.** Isaac Lab 2.3 runs within Isaac Sim's Python interpreter — it is not a peer service. There is one process to manage, not two.
 - Mission Control manages: environment configs, training run params, checkpoint output paths
-- Workflow Builder nodes available for Isaac Lab regardless of v1 scope decision
+- All `lab.*` Workflow Builder nodes are v1 deliverables — not stubbed
 
 ### cuRobo
 - Runs inside Isaac ROS container
@@ -899,15 +913,15 @@ mission-control/
 │
 ├── backend/                         # FastAPI application
 │   ├── main.py
-│   ├── api/
-│   │   ├── ros2.py                  # ROS2 topic/tf/param/service endpoints
-│   │   ├── isaac.py                 # Isaac Sim/Lab control endpoints
-│   │   ├── containers.py            # Docker management endpoints
-│   │   ├── registry.py              # File registry endpoints
-│   │   ├── builds.py                # Build process trigger + monitor
-│   │   ├── workflows.py             # Workflow graph CRUD + execution
-│   │   ├── agents.py                # Agent dispatch + monitor
-│   │   └── compute.py               # Compute monitoring endpoints
+│   ├── api/                            # All 8 routers live — no stubs
+│   │   ├── registry.py              # File registry CRUD, robot registration, scenes
+│   │   ├── builds.py                # Build log CRUD, per-build file listing
+│   │   ├── agents.py                # Agent logs (paginated), summary (GROUP BY)
+│   │   ├── workflows.py             # Graph CRUD, run lifecycle, per-node logs
+│   │   ├── compute.py               # Compute snapshots (list, latest/host, create)
+│   │   ├── containers.py            # Docker SDK status check, graceful fallback
+│   │   ├── ros2.py                  # Topics/nodes via rosbridge, connection status
+│   │   └── isaac.py                 # Isaac Sim status (static — requires container)
 │   ├── rosbridge/
 │   │   ├── client.py                # Persistent rosbridge WebSocket client
 │   │   ├── topic_monitor.py
@@ -928,8 +942,11 @@ mission-control/
 │   │   │   └── container.py
 │   │   └── graph_parser.py          # JSON/YAML graph → execution plan
 │   ├── db/
-│   │   ├── empirical/               # Empirical DB models (read-only views)
-│   │   └── registry/                # Registry DB models + Alembic migrations
+│   │   ├── session.py               # Async engine init, get_registry_session, get_empirical_session
+│   │   ├── empirical/
+│   │   │   └── models.py            # EmpiricalBase + 6 models (Robot, JointSpec, LinkSpec, etc.)
+│   │   └── registry/
+│   │       └── models.py            # Base + 15 models (FileRegistry, BuildLog, AgentLog, etc.)
 │   └── services/
 │       ├── isaac_sim.py             # Isaac Sim process management
 │       ├── isaac_lab.py             # Isaac Lab run management
@@ -989,8 +1006,20 @@ mission-control/
 │   └── validate_urdf.py
 │
 ├── database/
-│   ├── empirical/                   # Empirical DB (v3.1.0+) migrations
+│   ├── empirical/                   # Empirical DB Alembic migrations
+│   │   ├── alembic.ini
+│   │   ├── env.py                   # Reads MC_EMPIRICAL_DB_URL, imports EmpiricalBase
+│   │   ├── script.py.mako
+│   │   ├── seed_cr10.py             # Idempotent CR10 seed (parses URDF + collision YAML)
+│   │   └── versions/
+│   │       └── 0001_initial_schema.py  # 6 tables
 │   └── registry/                    # Registry DB Alembic migrations
+│       ├── alembic.ini
+│       ├── env.py
+│       ├── script.py.mako
+│       └── versions/
+│           ├── 0001_initial_schema.py  # 10 tables
+│           └── 0002_add_remaining_tables.py  # 5 tables
 │
 ├── workflows/                       # Saved workflow YAML exports (Git-versioned)
 │   └── examples/
@@ -1005,15 +1034,57 @@ mission-control/
 
 ---
 
-## 16. Open Decisions
+## 16. Resolved Decisions
 
-These 3 decisions are required to complete the spec. All other sections are final.
+All three open decisions are resolved. This section is final.
 
-| ID | Question | Impact |
-|---|---|---|
-| OD-01 | **v1 automation loop** — what does a complete start-to-finish workflow look like for your cinema robot today, without Cosmos/GR00T? Walk through one real scenario. | Determines example workflows, default node library priority, and what Tier 1 of the Workflow Builder ships with |
-| OD-02 | **Isaac Sim role** — digital twin visualizer only, or also the training environment where Isaac Lab RL runs? | Determines Isaac Sim/Lab integration depth, compute requirements, and whether `sim.*` and `lab.*` nodes are co-dependent |
-| OD-03 | **Isaac Lab in v1** — is Isaac Lab training in scope for v1, or deferred? If deferred, is Isaac Lab used for anything else in v1 (e.g. trajectory validation)? | Determines whether `lab.*` workflow nodes ship in v1 or are stubbed for future |
+### OD-01 — v1 Automation Loop ✅ RESOLVED
+
+The canonical v1 workflow follows the full 8-step NVIDIA reference architecture:
+
+1. **Robot Build** — URDF + USD + cuRobo config from empirical DB
+2. **Scene Build** — USD stage + Isaac Sim world config
+3. **Sensor Config** — ZED X YAML + ROS2 param files
+4. **Isaac ROS Pipeline Launch** — launch file execution inside Isaac ROS container
+5. **Digital Twin Sync** — Isaac Sim ↔ real robot joint state comparison, verified via Mission Control
+6. **Training Data Collection** — bag recording of selected topics during real robot operation
+7. **Isaac Lab Training** — RL/IL training run using collected data
+8. **Evaluation and Promotion** — checkpoint eval, operator approval, config promotion
+
+All Workflow Builder node categories (`bag.*`, `sim.*`, `lab.*`, `config.*`, `validate.*`, `container.*`, `notify.*`, `condition.*`, `dataset.*`) are **v1 deliverables, not stubbed**.
+
+---
+
+### OD-02 — Isaac Sim / Isaac Lab Relationship ✅ RESOLVED
+
+Isaac Sim 5.1 serves as **both** the digital twin visualizer and the environment Isaac Lab runs within.
+
+Per NVIDIA documentation: Isaac Lab 2.3 is built on top of Isaac Sim and runs within Isaac Sim's Python interpreter. Isaac Lab requires Isaac Sim's installation, which packages the core robotics tools it depends on — URDF and MJCF importers, simulation managers, and ROS features. **Isaac Lab is not a peer service.** There is one process to manage, not two.
+
+Architecture impact:
+- The architecture diagram (Section 3) reflects this: Isaac Sim and Isaac Lab are shown as one block
+- The DB access table reflects this: one entry for Isaac Sim/Lab
+- Section 13 reflects this: Isaac Lab management lives within Isaac Sim process context
+- `sim.*` and `lab.*` nodes are co-dependent in the workflow engine
+
+---
+
+### OD-03 — Isaac Lab Scope in v1 ✅ RESOLVED
+
+**Isaac Lab 2.3 is fully in scope for v1.** All pipeline software ships in v1:
+
+| Component | v1 Status |
+|---|---|
+| Isaac Sim 5.1 | ✅ In scope |
+| Isaac Lab 2.3 | ✅ In scope — fully implemented |
+| Isaac ROS 4.0 | ✅ In scope |
+| cuRobo | ✅ In scope |
+| nvblox | ✅ In scope |
+| ZED X | ✅ In scope |
+| Cosmos | ❌ Out of scope — future |
+| GR00T | ❌ Out of scope — future |
+
+All `lab.*` Workflow Builder nodes are v1 deliverables. Nothing is stubbed.
 
 ---
 
@@ -1022,7 +1093,7 @@ These 3 decisions are required to complete the spec. All other sections are fina
 | Term | Definition |
 |---|---|
 | Mission Control | The web-based infrastructure and observability platform defined in this spec |
-| Empirical DB | Existing v3.1.0 database of physically verified robot properties — single source of truth |
+| Empirical DB | PostgreSQL database of physically verified robot properties — 6 tables, CR10 seeded — single source of truth |
 | Registry DB | New Mission Control database tracking file versions, builds, workflows, sessions |
 | NULL field | A config field with no verified empirical value — left blank, never estimated or filled with placeholder |
 | Promoted file | A config file approved by operator for use in active pipelines and workflows |
@@ -1037,6 +1108,5 @@ These 3 decisions are required to complete the spec. All other sections are fina
 
 ---
 
-*Spec v2.0.0-draft — 2026-03-01*
-*Next deliverables: CLAUDE.md (orchestration rules), AGENT_PROMPTS.md (per-agent system prompts)*
-*Blocked on: OD-01, OD-02, OD-03*
+*Spec v2.1.0 — 2026-03-01*
+*Both databases live (empirical: 6 tables + CR10 seed, registry: 15 tables). All 8 API routers implemented. Next deliverable: frontend pages for new API routes.*

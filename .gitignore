@@ -39,6 +39,11 @@ registry/scripts/*
 *.mcap
 *.db3
 
+# SQLite runtime files
+*.db-shm
+*.db-wal
+**/mission_control.db
+
 # IDE
 .vscode/settings.json
 .idea/

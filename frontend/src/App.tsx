@@ -24,7 +24,7 @@ import FleetPage from '@/pages/FleetPage';
 import AgentsPage from '@/pages/AgentsPage';
 import InfraPage from '@/pages/InfraPage';
 import RegistryPage from '@/pages/RegistryPage';
-import WorkflowsPage from '@/pages/WorkflowsPage';
+import PipelinesPage from '@/pages/PipelinesPage';
 import RobotsPage from '@/pages/RobotsPage';
 
 // Register all panels (for the 3D viewer mosaic)
@@ -50,7 +50,7 @@ const PAGE_COMPONENTS = {
   agents: AgentsPage,
   infrastructure: InfraPage,
   registry: RegistryPage,
-  workflows: WorkflowsPage,
+  pipelines: PipelinesPage,
 } as const;
 
 export default function App() {

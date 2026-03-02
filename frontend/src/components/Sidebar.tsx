@@ -35,7 +35,7 @@ const NAV_SECTIONS: NavSection[] = [
     label: 'Management',
     items: [
       { id: 'registry', label: 'Registry', icon: '◈' },
-      { id: 'workflows', label: 'Workflows', icon: '⟐' },
+      { id: 'pipelines', label: 'Pipelines', icon: '⟐' },
     ],
   },
 ];

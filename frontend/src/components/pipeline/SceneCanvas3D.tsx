@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useCallback } from 'react';
+import React, { useRef, useEffect, useCallback, useState } from 'react';
 import * as THREE from 'three';
 import type { ScenePlacement } from '@/stores/sceneStore';
 
@@ -8,11 +8,10 @@ interface SceneCanvas3DProps {
   onSelectPlacement: (id: string | null) => void;
   onUpdatePlacement: (id: string, updates: Partial<ScenePlacement>) => void;
   onDropAsset: (assetData: string, canvasX: number, canvasY: number) => void;
+  onRemovePlacement: (id: string) => void;
 }
 
 const DEG2RAD = Math.PI / 180;
-
-/** Ground plane at y=0 for drop raycasting */
 const GROUND_PLANE = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
 function createMeshForType(assetType: ScenePlacement['asset_type']): THREE.Mesh {
@@ -26,7 +25,7 @@ function createMeshForType(assetType: ScenePlacement['asset_type']): THREE.Mesh 
       const geo = new THREE.PlaneGeometry(4, 4);
       const mat = new THREE.MeshBasicMaterial({ color: 0x4488ff, wireframe: true });
       const mesh = new THREE.Mesh(geo, mat);
-      mesh.rotation.x = -Math.PI / 2; // lay flat
+      mesh.rotation.x = -Math.PI / 2;
       return mesh;
     }
     case 'object': {
@@ -73,7 +72,7 @@ function setEmissive(mesh: THREE.Mesh, color: number) {
   }
 }
 
-// --- Inline orbit controls to avoid conflicts with selection ---
+// --- Orbit controls: right-click orbit (unless blocked), middle pan, scroll zoom ---
 
 class SceneOrbitControls {
   private camera: THREE.PerspectiveCamera;
@@ -83,6 +82,8 @@ class SceneOrbitControls {
   private isPanning = false;
   private lastMouse = new THREE.Vector2();
   private el: HTMLElement;
+  /** Set true to prevent the next right-click from starting orbit */
+  blockNextOrbit = false;
 
   constructor(camera: THREE.PerspectiveCamera, el: HTMLElement) {
     this.camera = camera;
@@ -93,12 +94,16 @@ class SceneOrbitControls {
     window.addEventListener('mousemove', this.onMouseMove);
     window.addEventListener('mouseup', this.onMouseUp);
     el.addEventListener('wheel', this.onWheel, { passive: false });
-    el.addEventListener('contextmenu', (e) => e.preventDefault());
   }
 
   private onMouseDown = (e: MouseEvent) => {
-    // Right-click = orbit, middle = pan (left-click reserved for selection)
-    if (e.button === 2) this.isOrbiting = true;
+    if (e.button === 2) {
+      if (this.blockNextOrbit) {
+        this.blockNextOrbit = false;
+        return;
+      }
+      this.isOrbiting = true;
+    }
     if (e.button === 1) this.isPanning = true;
     this.lastMouse.set(e.clientX, e.clientY);
   };
@@ -149,12 +154,22 @@ class SceneOrbitControls {
   }
 }
 
+// --- Context menu ---
+
+interface ContextMenuState {
+  x: number;
+  y: number;
+  placementId: string;
+  label: string;
+}
+
 export const SceneCanvas3D: React.FC<SceneCanvas3DProps> = ({
   placements,
   selectedId,
   onSelectPlacement,
   onUpdatePlacement: _onUpdatePlacement,
   onDropAsset,
+  onRemovePlacement,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
@@ -165,13 +180,27 @@ export const SceneCanvas3D: React.FC<SceneCanvas3DProps> = ({
   const raycasterRef = useRef(new THREE.Raycaster());
   const animIdRef = useRef<number>(0);
 
+  const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null);
+
   // Refs for latest props (used in native event handlers)
   const onSelectRef = useRef(onSelectPlacement);
   onSelectRef.current = onSelectPlacement;
   const onDropRef = useRef(onDropAsset);
   onDropRef.current = onDropAsset;
+  const placementsRef = useRef(placements);
+  placementsRef.current = placements;
+  const setCtxMenuRef = useRef(setCtxMenu);
+  setCtxMenuRef.current = setCtxMenu;
 
-  // ---- Initialize Three.js scene directly (no SceneManager) ----
+  // Close context menu on any left click
+  useEffect(() => {
+    if (!ctxMenu) return;
+    const close = () => setCtxMenu(null);
+    window.addEventListener('mousedown', close);
+    return () => window.removeEventListener('mousedown', close);
+  }, [ctxMenu]);
+
+  // ---- Initialize Three.js ----
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -181,10 +210,10 @@ export const SceneCanvas3D: React.FC<SceneCanvas3DProps> = ({
 
     // Lighting
     scene.add(new THREE.AmbientLight(0xfff0e0, 0.4));
-    const key = new THREE.DirectionalLight(0xffeedd, 1.0);
-    key.position.set(5, 8, 5);
-    key.castShadow = true;
-    scene.add(key);
+    const keyLight = new THREE.DirectionalLight(0xffeedd, 1.0);
+    keyLight.position.set(5, 8, 5);
+    keyLight.castShadow = true;
+    scene.add(keyLight);
     scene.add(new THREE.DirectionalLight(0xaaccff, 0.3).translateX(-3).translateY(4));
     scene.add(new THREE.HemisphereLight(0xffeedd, 0x222222, 0.2));
 
@@ -209,11 +238,9 @@ export const SceneCanvas3D: React.FC<SceneCanvas3DProps> = ({
     renderer.toneMappingExposure = 1.2;
     container.appendChild(renderer.domElement);
     rendererRef.current = renderer;
-
-    // Make canvas non-interactive for pointer events so container div catches them
     renderer.domElement.style.pointerEvents = 'none';
 
-    // Orbit controls (right-click orbit, middle pan, scroll zoom)
+    // Orbit controls
     const controls = new SceneOrbitControls(camera, container);
     controlsRef.current = controls;
 
@@ -234,9 +261,8 @@ export const SceneCanvas3D: React.FC<SceneCanvas3DProps> = ({
     };
     animIdRef.current = requestAnimationFrame(animate);
 
-    // --- Native DOM: click for selection ---
-    const onMouseDown = (e: MouseEvent) => {
-      if (e.button !== 0) return; // left-click only
+    // --- Raycast helper ---
+    const raycastAsset = (e: MouseEvent): string | undefined => {
       const rect = container.getBoundingClientRect();
       const mouse = new THREE.Vector2(
         ((e.clientX - rect.left) / rect.width) * 2 - 1,
@@ -246,14 +272,43 @@ export const SceneCanvas3D: React.FC<SceneCanvas3DProps> = ({
       const meshes = Array.from(meshMapRef.current.values());
       const hits = raycasterRef.current.intersectObjects(meshes);
       if (hits.length > 0) {
-        const id = hits[0].object.userData.placementId as string | undefined;
-        if (id) { onSelectRef.current(id); return; }
+        return hits[0].object.userData.placementId as string | undefined;
       }
-      onSelectRef.current(null);
+      return undefined;
+    };
+
+    // --- Left-click: select ---
+    const onMouseDown = (e: MouseEvent) => {
+      if (e.button === 0) {
+        setCtxMenuRef.current(null); // close context menu
+        const id = raycastAsset(e);
+        onSelectRef.current(id ?? null);
+      }
     };
     container.addEventListener('mousedown', onMouseDown);
 
-    // --- Native DOM: drag and drop ---
+    // --- Right-click: context menu on asset, orbit on empty ---
+    const onContextMenu = (e: MouseEvent) => {
+      const id = raycastAsset(e);
+      if (id) {
+        e.preventDefault();
+        controls.blockNextOrbit = true;
+        const placement = placementsRef.current.find((p) => p.id === id);
+        const rect = container.getBoundingClientRect();
+        setCtxMenuRef.current({
+          x: e.clientX - rect.left,
+          y: e.clientY - rect.top,
+          placementId: id,
+          label: placement?.label || 'Asset',
+        });
+      } else {
+        // No asset hit — allow orbit (don't prevent default so contextmenu is suppressed)
+        e.preventDefault();
+      }
+    };
+    container.addEventListener('contextmenu', onContextMenu);
+
+    // --- Drag and drop ---
     const onDragOver = (e: DragEvent) => {
       e.preventDefault();
       if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
@@ -262,7 +317,6 @@ export const SceneCanvas3D: React.FC<SceneCanvas3DProps> = ({
       e.preventDefault();
       const assetData = e.dataTransfer?.getData('application/scene-asset');
       if (!assetData) return;
-
       const rect = container.getBoundingClientRect();
       const mouse = new THREE.Vector2(
         ((e.clientX - rect.left) / rect.width) * 2 - 1,
@@ -273,7 +327,6 @@ export const SceneCanvas3D: React.FC<SceneCanvas3DProps> = ({
       const intersection = new THREE.Vector3();
       const hit = rc.ray.intersectPlane(GROUND_PLANE, intersection);
       if (hit) {
-        // Three.js ground: x, z. Map to scene: x=x, y=z
         onDropRef.current(assetData, intersection.x, intersection.z);
       } else {
         onDropRef.current(assetData, 0, 0);
@@ -287,6 +340,7 @@ export const SceneCanvas3D: React.FC<SceneCanvas3DProps> = ({
       ro.disconnect();
       controls.dispose();
       container.removeEventListener('mousedown', onMouseDown);
+      container.removeEventListener('contextmenu', onContextMenu);
       container.removeEventListener('dragover', onDragOver);
       container.removeEventListener('drop', onDrop);
       renderer.dispose();
@@ -309,7 +363,6 @@ export const SceneCanvas3D: React.FC<SceneCanvas3DProps> = ({
     const meshMap = meshMapRef.current;
     const currentIds = new Set(placements.map((p) => p.id));
 
-    // Remove meshes for placements that no longer exist
     for (const [id, mesh] of meshMap) {
       if (!currentIds.has(id)) {
         scene.remove(mesh);
@@ -319,7 +372,6 @@ export const SceneCanvas3D: React.FC<SceneCanvas3DProps> = ({
       }
     }
 
-    // Add or update meshes
     for (const placement of placements) {
       let mesh = meshMap.get(placement.id);
       if (!mesh) {
@@ -334,6 +386,14 @@ export const SceneCanvas3D: React.FC<SceneCanvas3DProps> = ({
     }
   }, [placements, selectedId]);
 
+  // ---- Context menu handlers ----
+  const handleDelete = useCallback(() => {
+    if (ctxMenu) {
+      onRemovePlacement(ctxMenu.placementId);
+      setCtxMenu(null);
+    }
+  }, [ctxMenu, onRemovePlacement]);
+
   return (
     <div
       ref={containerRef}
@@ -344,7 +404,55 @@ export const SceneCanvas3D: React.FC<SceneCanvas3DProps> = ({
         overflow: 'hidden',
         cursor: 'crosshair',
       }}
-    />
+    >
+      {/* Context menu overlay */}
+      {ctxMenu && (
+        <div
+          style={{
+            position: 'absolute',
+            left: ctxMenu.x,
+            top: ctxMenu.y,
+            zIndex: 100,
+            background: '#1a1a1a',
+            border: '1px solid #333',
+            borderRadius: 4,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+            minWidth: 140,
+            padding: '4px 0',
+            pointerEvents: 'auto',
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <div style={{
+            padding: '4px 10px',
+            fontSize: 10,
+            color: '#666',
+            borderBottom: '1px solid #2a2a2a',
+            marginBottom: 2,
+          }}>
+            {ctxMenu.label}
+          </div>
+          <button
+            onClick={handleDelete}
+            style={{
+              display: 'block',
+              width: '100%',
+              padding: '6px 10px',
+              background: 'transparent',
+              border: 'none',
+              color: '#ff4444',
+              fontSize: 11,
+              cursor: 'pointer',
+              textAlign: 'left',
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,68,68,0.1)'; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+          >
+            Delete
+          </button>
+        </div>
+      )}
+    </div>
   );
 };
 

@@ -11,6 +11,7 @@ export interface SceneCanvasProps {
   onSelectPlacement: (id: string | null) => void;
   onUpdatePlacement: (id: string, updates: Partial<ScenePlacement>) => void;
   onAddPlacement: (placement: ScenePlacement) => void;
+  onRemovePlacement: (id: string) => void;
 }
 
 // --- Styles ---
@@ -98,6 +99,7 @@ export default function SceneCanvas({
   onSelectPlacement,
   onUpdatePlacement,
   onAddPlacement,
+  onRemovePlacement,
 }: SceneCanvasProps) {
   const sceneViewMode = useSceneStore((s) => s.sceneViewMode);
   const setSceneViewMode = useSceneStore((s) => s.setSceneViewMode);
@@ -178,6 +180,7 @@ export default function SceneCanvas({
               onSelectPlacement={onSelectPlacement}
               onUpdatePlacement={onUpdatePlacement}
               onDropAsset={onDropAsset}
+              onRemovePlacement={onRemovePlacement}
             />
           </div>
         )}
@@ -189,6 +192,7 @@ export default function SceneCanvas({
               onSelectPlacement={onSelectPlacement}
               onUpdatePlacement={onUpdatePlacement}
               onDropAsset={onDropAsset}
+              onRemovePlacement={onRemovePlacement}
             />
           </div>
         )}

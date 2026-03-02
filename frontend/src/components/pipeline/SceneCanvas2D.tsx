@@ -9,6 +9,7 @@ export interface SceneCanvas2DProps {
   onSelectPlacement: (id: string | null) => void;
   onUpdatePlacement: (id: string, updates: Partial<ScenePlacement>) => void;
   onDropAsset: (assetData: string, canvasX: number, canvasY: number) => void;
+  onRemovePlacement: (id: string) => void;
 }
 
 // --- Constants ---
@@ -279,12 +280,20 @@ function computeAutoFit(
 
 // --- Component ---
 
+interface ContextMenu2D {
+  x: number;
+  y: number;
+  placementId: string;
+  label: string;
+}
+
 export default function SceneCanvas2D({
   placements,
   selectedId,
   onSelectPlacement,
   onUpdatePlacement,
   onDropAsset,
+  onRemovePlacement,
 }: SceneCanvas2DProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -295,6 +304,7 @@ export default function SceneCanvas2D({
   const initialFitDone = useRef(false);
 
   const [canvasSize, setCanvasSize] = useState({ w: 800, h: 600 });
+  const [ctxMenu, setCtxMenu] = useState<ContextMenu2D | null>(null);
 
   // --- ResizeObserver ---
   useEffect(() => {
@@ -494,10 +504,32 @@ export default function SceneCanvas2D({
     onDropAsset(assetData, Math.round(wx * 100) / 100, Math.round(wy * 100) / 100);
   };
 
-  // --- Prevent context menu on middle click ---
+  // --- Right-click context menu ---
 
   const handleContextMenu = (e: React.MouseEvent) => {
-    if (e.button === 1) e.preventDefault();
+    e.preventDefault();
+    const { mx, my } = getMousePos(e);
+    const t = transformRef.current;
+    const hit = hitTest(mx, my, placements, t, canvasSize.w, canvasSize.h);
+    if (hit) {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      setCtxMenu({
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top,
+        placementId: hit.id,
+        label: hit.label,
+      });
+    } else {
+      setCtxMenu(null);
+    }
+  };
+
+  // Close context menu on any left click
+  const handleMouseDownWrapper = (e: React.MouseEvent) => {
+    setCtxMenu(null);
+    handleMouseDown(e);
   };
 
   return (
@@ -516,7 +548,7 @@ export default function SceneCanvas2D({
         width={canvasSize.w}
         height={canvasSize.h}
         style={{ display: 'block', width: '100%', height: '100%', cursor: 'crosshair' }}
-        onMouseDown={handleMouseDown}
+        onMouseDown={handleMouseDownWrapper}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
@@ -525,6 +557,52 @@ export default function SceneCanvas2D({
         onDrop={handleDrop}
         onContextMenu={handleContextMenu}
       />
+      {/* Context menu */}
+      {ctxMenu && (
+        <div
+          style={{
+            position: 'absolute',
+            left: ctxMenu.x,
+            top: ctxMenu.y,
+            zIndex: 100,
+            background: '#1a1a1a',
+            border: '1px solid #333',
+            borderRadius: 4,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+            minWidth: 140,
+            padding: '4px 0',
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <div style={{
+            padding: '4px 10px',
+            fontSize: 10,
+            color: '#666',
+            borderBottom: '1px solid #2a2a2a',
+            marginBottom: 2,
+          }}>
+            {ctxMenu.label}
+          </div>
+          <button
+            onClick={() => { onRemovePlacement(ctxMenu.placementId); setCtxMenu(null); }}
+            style={{
+              display: 'block',
+              width: '100%',
+              padding: '6px 10px',
+              background: 'transparent',
+              border: 'none',
+              color: '#ff4444',
+              fontSize: 11,
+              cursor: 'pointer',
+              textAlign: 'left',
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,68,68,0.1)'; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+          >
+            Delete
+          </button>
+        </div>
+      )}
     </div>
   );
 }

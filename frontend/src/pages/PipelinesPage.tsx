@@ -395,7 +395,7 @@ function PipelineEditor() {
 
   const [viewMode, setViewMode] = useState<ViewMode>('visual');
 
-  const { sceneConfig, selectedPlacementId, selectPlacement, updatePlacement, addPlacement } = useSceneStore();
+  const { sceneConfig, selectedPlacementId, selectPlacement, updatePlacement, addPlacement, removePlacement } = useSceneStore();
 
   const handleBack = useCallback(() => {
     clearActive();
@@ -505,6 +505,7 @@ function PipelineEditor() {
               onSelectPlacement={selectPlacement}
               onUpdatePlacement={updatePlacement}
               onAddPlacement={addPlacement}
+              onRemovePlacement={removePlacement}
             />
           ) : (
             <YamlEditor
@@ -528,7 +529,7 @@ function PipelineEditor() {
               onClose={handleCloseDrawer}
               scenePlacement={viewMode === 'scene' ? sceneConfig.placements.find(p => p.id === selectedPlacementId) ?? null : null}
               onUpdateScenePlacement={viewMode === 'scene' ? updatePlacement : undefined}
-              onRemoveScenePlacement={viewMode === 'scene' ? (id: string) => { useSceneStore.getState().removePlacement(id); selectPlacement(null); } : undefined}
+              onRemoveScenePlacement={viewMode === 'scene' ? (id: string) => { removePlacement(id); selectPlacement(null); } : undefined}
             />
           </div>
         )}

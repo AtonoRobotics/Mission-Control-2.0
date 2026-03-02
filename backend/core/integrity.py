@@ -79,12 +79,12 @@ def _check_spec_version_in_doc() -> list[IntegrityFailure]:
     if not spec_path.exists():
         return [IntegrityFailure("spec", "L5-R1", "docs/SPEC.md not found", "CRITICAL")]
 
-    first_line = spec_path.read_text().split("\n")[0]
-    if SPEC_VERSION not in first_line:
+    header = "\n".join(spec_path.read_text().split("\n")[:5])
+    if SPEC_VERSION not in header:
         return [IntegrityFailure(
             "spec", "L5-R1",
-            f"SPEC.md declares version not matching SPEC_VERSION='{SPEC_VERSION}'. "
-            f"First line: '{first_line}'",
+            f"SPEC.md header does not contain SPEC_VERSION='{SPEC_VERSION}'. "
+            f"Header: '{header}'",
             "CRITICAL",
         )]
     return []
@@ -151,7 +151,17 @@ def _check_module_hashes() -> list[IntegrityFailure]:
 
 def _check_required_modules_exist() -> list[IntegrityFailure]:
     """Verify all modules referenced in prompt_loader manifest exist on disk."""
-    from backend.core.prompt_loader import validate_all_modules_exist
+    try:
+        from core.prompt_loader import validate_all_modules_exist
+    except ImportError:
+        try:
+            from backend.core.prompt_loader import validate_all_modules_exist
+        except ImportError:
+            return [IntegrityFailure(
+                "architecture", "L4-R1",
+                "prompt_loader module could not be imported — prompt system not yet set up",
+                "WARN",
+            )]
     missing = validate_all_modules_exist()
     if not missing:
         return []

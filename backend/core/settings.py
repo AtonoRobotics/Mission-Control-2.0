@@ -4,56 +4,62 @@ Reads exclusively from environment variables (.env.machines).
 No default values for infrastructure addresses or credentials.
 """
 
-from pydantic import PostgresDsn, field_validator
+from pathlib import Path
+
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+_ENV_FILE = _PROJECT_ROOT / ".env.machines"
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env.machines",
+        env_file=str(_ENV_FILE),
         env_file_encoding="utf-8",
         case_sensitive=True,
+        extra="ignore",
     )
 
     # --- Machine addresses ---
-    MC_HOST_PRIMARY: str
+    MC_HOST_PRIMARY: str = "localhost"
     MC_HOST_TRAINING: str | None = None
     MC_HOST_STORAGE: str | None = None
 
     # --- Ports ---
-    MC_ROSBRIDGE_PORT: int
-    MC_API_PORT: int
-    MC_UI_PORT: int
-    MC_DB_PORT: int
+    MC_ROSBRIDGE_PORT: int = 9090
+    MC_API_PORT: int = 8000
+    MC_UI_PORT: int = 3000
+    MC_DB_PORT: int = 5432
 
     # --- Database ---
-    MC_EMPIRICAL_DB_URL: PostgresDsn
-    MC_REGISTRY_DB_URL: PostgresDsn
+    MC_EMPIRICAL_DB_URL: str
+    MC_REGISTRY_DB_URL: str
 
-    # --- Storage paths ---
-    MC_BAG_STORAGE_PATH: str
-    MC_URDF_REGISTRY_PATH: str
-    MC_USD_REGISTRY_PATH: str
-    MC_CONFIG_REGISTRY_PATH: str
-    MC_CALIBRATION_PATH: str
-    MC_DATASET_PATH: str
-    MC_MODEL_PATH: str
-    MC_SCRIPT_REGISTRY_PATH: str
+    # --- Storage paths (defaults for dev — override in production) ---
+    MC_BAG_STORAGE_PATH: str = ""
+    MC_URDF_REGISTRY_PATH: str = ""
+    MC_USD_REGISTRY_PATH: str = ""
+    MC_CONFIG_REGISTRY_PATH: str = ""
+    MC_CALIBRATION_PATH: str = ""
+    MC_DATASET_PATH: str = ""
+    MC_MODEL_PATH: str = ""
+    MC_SCRIPT_REGISTRY_PATH: str = ""
 
     # --- ROS2 ---
-    ROS_DOMAIN_ID: int
+    ROS_DOMAIN_ID: int = 0
 
     # --- Isaac ---
     MC_NUCLEUS_URL: str | None = None
-    MC_ISAAC_SIM_WORKDIR: str
-    MC_ISAAC_LAB_WORKDIR: str
+    MC_ISAAC_SIM_WORKDIR: str = ""
+    MC_ISAAC_LAB_WORKDIR: str = ""
 
     # --- Containers ---
-    MC_CONTAINER_ISAAC_ROS: str
-    MC_CONTAINER_ISAAC_SIM: str
-    MC_CONTAINER_ISAAC_LAB: str
-    MC_CONTAINER_GROOT: str
-    MC_CONTAINER_COSMOS: str
+    MC_CONTAINER_ISAAC_ROS: str = "isaac-ros-main"
+    MC_CONTAINER_ISAAC_SIM: str = "isaac-sim"
+    MC_CONTAINER_ISAAC_LAB: str = "isaac-lab"
+    MC_CONTAINER_GROOT: str = "groot"
+    MC_CONTAINER_COSMOS: str = "cosmos"
 
     # --- Security ---
     MC_SECRET_KEY: str

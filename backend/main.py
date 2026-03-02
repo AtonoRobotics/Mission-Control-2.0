@@ -4,8 +4,9 @@ Cinema Robot Digital Twin Infrastructure Backend
 
 Startup sequence:
   1. Integrity checks — CRITICAL failures block startup entirely
-  2. RosBridge connection
-  3. Accept requests
+  2. Database engine initialization
+  3. RosBridge connection (best-effort — DB works without ROS)
+  4. Accept requests
 """
 
 import structlog
@@ -16,6 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from core.settings import get_settings
 from core.integrity import run_startup_integrity_check, has_critical_failures
+from db.session import init_engines, dispose_engines, get_registry_engine, get_empirical_engine
 from rosbridge.client import RosBridgeClient
 from api import ros2, isaac, containers, registry, builds, workflows, agents, compute
 
@@ -38,14 +40,45 @@ async def lifespan(app: FastAPI):
     if failures:
         logger.warning("startup_integrity_warnings", count=len(failures))
 
-    # ── RosBridge ─────────────────────────────────────────────────────────────
+    # ── Database engines ──────────────────────────────────────────────────────
+    try:
+        init_engines()
+        # Verify connectivity with a simple query
+        from sqlalchemy import text
+        registry_engine = get_registry_engine()
+        empirical_engine = get_empirical_engine()
+        async with registry_engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+        async with empirical_engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+        app.state.db_status = "connected"
+        logger.info("database_engines_ready")
+    except Exception as e:
+        app.state.db_status = f"error: {e}"
+        logger.error("database_init_failed", error=str(e))
+        # DB failure is fatal — cannot serve registry/build APIs without it
+        sys.exit(1)
+
+    # ── RosBridge (best-effort) ───────────────────────────────────────────────
     app.state.rosbridge = RosBridgeClient(url=settings.rosbridge_url)
-    await app.state.rosbridge.connect()
+    try:
+        await app.state.rosbridge.connect()
+        app.state.rosbridge_status = "connected"
+    except Exception as e:
+        app.state.rosbridge_status = f"disconnected: {e}"
+        logger.warning("rosbridge_connect_failed", error=str(e),
+                       hint="Backend will serve DB-backed endpoints without ROS.")
+
     logger.info("mission_control_ready", host=settings.MC_HOST_PRIMARY)
 
     yield
 
-    await app.state.rosbridge.disconnect()
+    # ── Shutdown ──────────────────────────────────────────────────────────────
+    try:
+        await app.state.rosbridge.disconnect()
+    except Exception:
+        pass
+    await dispose_engines()
     logger.info("mission_control_shutdown")
 
 
@@ -76,7 +109,12 @@ app.include_router(compute.router, prefix="/api/compute", tags=["Compute"])
 
 @app.get("/health")
 async def health() -> dict:
-    return {"status": "ok", "service": "mission-control-backend"}
+    return {
+        "status": "ok",
+        "service": "mission-control-backend",
+        "db": getattr(app.state, "db_status", "unknown"),
+        "rosbridge": getattr(app.state, "rosbridge_status", "unknown"),
+    }
 
 
 @app.get("/integrity")

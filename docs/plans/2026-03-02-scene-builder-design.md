@@ -228,6 +228,34 @@ A new `scene_compose` skill on the existing `simulate` MCP agent. The agent need
 5. Frontend receives `SceneConfig`, populates the scene canvas
 6. User refines manually (drag/reposition/delete/add)
 
+### Implementation Phases (Updated 2026-03-02)
+
+**Phase 1 (current): Ollama 72b → SceneConfig JSON**
+- Backend calls Ollama qwen2.5:72b on DGX Spark via the `simulate` MCP agent
+- LLM receives the NVIDIA asset catalog + registry assets as context
+- LLM generates `SceneConfig` JSON directly (placements with positions, rotations, scales)
+- No code execution, no new infrastructure — just an LLM call returning JSON
+- Assets render as placeholder geometry in the 3D viewport
+- **Status:** Next to implement
+
+**Phase 2 (future): Genie Sim 3.0 integration for USD output**
+- Repo cloned at `~/genie_sim/` (AgibotTech/genie_sim, open-source, 275MB)
+- Architecture: LLM generates Python DSL code → executes → produces USD scenes
+- 5,140 simulation-ready assets indexed in ChromaDB with Qwen text-embedding-v4
+- Asset retrieval ~200ms, full scene generation minutes
+- Requires: asset download from HuggingFace, MCP asset server (Docker), Python sandbox for DSL execution
+- Compatible with Isaac Sim 5.1 (container already available: `nvcr.io/nvidia/isaac-sim:5.1.0`)
+- Key benefit: real USD files with photorealistic assets, direct Isaac Sim integration
+- The DSL system prompt and scene language spec are in `source/geniesim/generator/config/geniesimscenegen.json`
+- Can reuse their MCP asset server (`source/geniesim/generator/server/`) or integrate asset search into our backend
+- LLM backend swappable — uses OpenAI-compatible API (default: Gemini, can point to Ollama)
+
+**Phase 3 (future): NVIDIA Chat IRO**
+- Ships with Isaac Sim 6.0 (currently Early Access, no ARM, must build from source)
+- Natural language → IRO YAML → Isaac Sim scene via RAG over production YAML examples
+- Requires Isaac Sim 6.0 GA + NVIDIA API key for LLM calls
+- Best option once Isaac Sim 6.0 hits GA and ARM support lands
+
 ### Constraint Solver (Post-LLM Refinement)
 
 After the LLM generates coarse placement, a lightweight constraint solver in the backend validates:

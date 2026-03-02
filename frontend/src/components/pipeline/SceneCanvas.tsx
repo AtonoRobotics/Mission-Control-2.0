@@ -107,18 +107,30 @@ export default function SceneCanvas({
   /** Handle asset drop from the AssetBrowser — creates a new ScenePlacement */
   const onDropAsset = useCallback(
     (assetData: string, worldX: number, worldY: number) => {
-      let parsed: { id: string; label: string; source: string; type: string };
+      let parsed: { id: string; label: string; source: string; asset_type: string };
       try {
         parsed = JSON.parse(assetData);
       } catch {
         return;
       }
 
+      // Normalize plural category names to singular asset_type
+      const typeMap: Record<string, ScenePlacement['asset_type']> = {
+        robots: 'robot', robot: 'robot',
+        environments: 'environment', environment: 'environment',
+        objects: 'object', object: 'object',
+        sensors: 'sensor', sensor: 'sensor',
+        lighting: 'light', light: 'light',
+        // Registry file_type mappings
+        urdf: 'robot', robot_usd: 'robot', usd: 'object', mesh: 'object',
+      };
+      const assetType = typeMap[parsed.asset_type] || 'object';
+
       const placement: ScenePlacement = {
         id: crypto.randomUUID(),
         asset_id: parsed.id,
         asset_source: (parsed.source as ScenePlacement['asset_source']) || 'nvidia',
-        asset_type: (parsed.type as ScenePlacement['asset_type']) || 'object',
+        asset_type: assetType,
         label: parsed.label || 'Untitled',
         position: { x: worldX, y: worldY, z: 0 },
         rotation: { x: 0, y: 0, z: 0 },

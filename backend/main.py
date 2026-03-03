@@ -19,7 +19,7 @@ from core.settings import get_settings
 from core.integrity import run_startup_integrity_check, has_critical_failures
 from db.session import init_engines, dispose_engines, get_registry_engine, get_empirical_engine
 from rosbridge.client import RosBridgeClient
-from api import ros2, isaac, containers, registry, builds, workflows, agents, compute, empirical, pipelines
+from api import auth, users, ros2, isaac, containers, registry, builds, workflows, agents, compute, empirical, pipelines, recordings, cloud, layouts, components, osmo
 
 logger = structlog.get_logger(__name__)
 settings = get_settings()
@@ -97,6 +97,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
+app.include_router(users.router, prefix="/api/users", tags=["Users"])
 app.include_router(ros2.router, prefix="/api/ros2", tags=["ROS2"])
 app.include_router(isaac.router, prefix="/api/isaac", tags=["Isaac"])
 app.include_router(containers.router, prefix="/api/containers", tags=["Containers"])
@@ -107,6 +109,11 @@ app.include_router(agents.router, prefix="/api/agents", tags=["Agents"])
 app.include_router(compute.router, prefix="/api/compute", tags=["Compute"])
 app.include_router(empirical.router, prefix="/api/empirical", tags=["Empirical"])
 app.include_router(pipelines.router, prefix="/api/pipelines", tags=["Pipelines"])
+app.include_router(recordings.router, prefix="/api/recordings", tags=["Recordings"])
+app.include_router(cloud.router, prefix="/api/cloud", tags=["Cloud"])
+app.include_router(layouts.router, prefix="/api/layouts", tags=["Layouts"])
+app.include_router(components.router, prefix="/api/components", tags=["Components"])
+app.include_router(osmo.router, prefix="/api/osmo", tags=["OSMO"])
 
 
 @app.get("/health")

@@ -66,8 +66,30 @@ class Settings(BaseSettings):
     MC_OLLAMA_MODEL: str = "qwen2.5-coder:32b"
     MC_OLLAMA_TIMEOUT: int = 300
 
+    # --- Cloud Storage (S3 / MinIO) ---
+    MC_S3_ENDPOINT_URL: str = ""
+    MC_S3_BUCKET: str = "mission-control"
+    MC_S3_ACCESS_KEY: str = ""
+    MC_S3_SECRET_KEY: str = ""
+    MC_S3_REGION: str = "us-east-1"
+    MC_S3_PRESIGN_EXPIRE: int = 3600
+
+    # --- OSMO (workflow orchestration) ---
+    MC_OSMO_URL: str = ""
+
+    # --- Tailscale ---
+    MC_TAILSCALE_ONLY: bool = False  # bind to Tailscale interface only
+    MC_TAILSCALE_INTERFACE: str = "tailscale0"
+
     # --- Security ---
     MC_SECRET_KEY: str
+
+    # --- OAuth (optional — disabled if not set) ---
+    MC_OAUTH_GOOGLE_CLIENT_ID: str = ""
+    MC_OAUTH_GOOGLE_CLIENT_SECRET: str = ""
+    MC_OAUTH_GITHUB_CLIENT_ID: str = ""
+    MC_OAUTH_GITHUB_CLIENT_SECRET: str = ""
+    MC_OAUTH_REDIRECT_BASE: str = "http://localhost:8000"
 
     @field_validator("MC_SECRET_KEY")
     @classmethod

@@ -20,7 +20,7 @@ logger = structlog.get_logger(__name__)
 # Module-level cache for the asset catalog
 _catalog_cache: dict[str, Any] | None = None
 
-CATALOG_PATH = Path(__file__).resolve().parent.parent.parent / "frontend" / "public" / "nvidia-assets.json"
+CATALOG_PATH = Path(__file__).resolve().parent.parent.parent / "packages" / "web" / "public" / "nvidia-assets.json"
 
 
 async def _load_nvidia_catalog() -> dict[str, Any]:

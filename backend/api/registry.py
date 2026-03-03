@@ -648,3 +648,67 @@ async def delete_scene(
     await session.delete(scene)
     await session.flush()
     logger.info("scene_deleted", scene_id=str(scene_id))
+
+
+# =============================================================================
+# Config Sharing via S3
+# =============================================================================
+
+
+class ShareOut(BaseModel):
+    file_id: UUID
+    s3_key: str
+    download_url: str
+
+
+class SharedConfigOut(BaseModel):
+    key: str
+    size: int
+    last_modified: str
+
+
+@router.post("/files/{file_id}/share", response_model=ShareOut)
+async def share_config(
+    file_id: UUID,
+    session: AsyncSession = Depends(get_registry_session),
+):
+    """Upload a promoted config to S3 for sharing."""
+    from services.cloud_storage import get_cloud_storage
+    import asyncio
+
+    result = await session.execute(
+        select(FileRegistry).where(FileRegistry.file_id == file_id)
+    )
+    file_entry = result.scalar_one_or_none()
+    if not file_entry:
+        raise HTTPException(status_code=404, detail="File not found")
+    if file_entry.status != "promoted":
+        raise HTTPException(status_code=409, detail="Only promoted files can be shared")
+
+    storage = get_cloud_storage()
+    s3_key = f"shared/configs/{file_entry.file_type}/{file_entry.file_hash}"
+
+    ok = await asyncio.to_thread(
+        storage.upload_file, file_entry.file_path, s3_key, "application/octet-stream"
+    )
+    if not ok:
+        raise HTTPException(status_code=502, detail="S3 upload failed")
+
+    url = storage.presign_download(s3_key)
+    logger.info("config_shared", file_id=str(file_id), s3_key=s3_key)
+    return ShareOut(file_id=file_id, s3_key=s3_key, download_url=url)
+
+
+@router.get("/shared", response_model=list[SharedConfigOut])
+async def list_shared_configs():
+    """List shared configs from S3."""
+    from services.cloud_storage import get_cloud_storage
+
+    storage = get_cloud_storage()
+    return storage.list_objects(prefix="shared/configs/")
+
+
+@router.post("/import/{key:path}", status_code=501)
+async def import_shared_config(key: str):
+    """Import a shared config from S3 to local registry. (Not yet implemented.)"""
+    raise HTTPException(status_code=501, detail="Import not yet implemented")

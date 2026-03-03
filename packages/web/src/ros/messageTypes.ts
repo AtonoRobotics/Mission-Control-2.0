@@ -1,0 +1,26 @@
+export const MSG = {
+  JointState: 'sensor_msgs/JointState',
+  PointCloud2: 'sensor_msgs/PointCloud2',
+  LaserScan: 'sensor_msgs/LaserScan',
+  Image: 'sensor_msgs/Image',
+  CompressedImage: 'sensor_msgs/CompressedImage',
+  CameraInfo: 'sensor_msgs/CameraInfo',
+  Range: 'sensor_msgs/Range',
+  PoseStamped: 'geometry_msgs/PoseStamped',
+  PoseArray: 'geometry_msgs/PoseArray',
+  PointStamped: 'geometry_msgs/PointStamped',
+  WrenchStamped: 'geometry_msgs/WrenchStamped',
+  PolygonStamped: 'geometry_msgs/PolygonStamped',
+  TransformStamped: 'geometry_msgs/TransformStamped',
+  Path: 'nav_msgs/Path',
+  Odometry: 'nav_msgs/Odometry',
+  OccupancyGrid: 'nav_msgs/OccupancyGrid',
+  Marker: 'visualization_msgs/Marker',
+  MarkerArray: 'visualization_msgs/MarkerArray',
+  InteractiveMarkerFeedback: 'visualization_msgs/InteractiveMarkerFeedback',
+  TFMessage: 'tf2_msgs/TFMessage',
+  DiagnosticArray: 'diagnostic_msgs/DiagnosticArray',
+  Log: 'rcl_interfaces/Log',
+} as const;
+
+export type RosMessageType = (typeof MSG)[keyof typeof MSG];

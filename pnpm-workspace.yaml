@@ -1,0 +1,3 @@
+packages:
+  - 'packages/*'
+  # frontend moved to packages/web

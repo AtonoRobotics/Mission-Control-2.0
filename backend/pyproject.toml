@@ -35,6 +35,10 @@ dependencies = [
     # File operations
     "aiofiles==24.1.0",
 
+    # Auth
+    "bcrypt==4.2.1",
+    "python-jose[cryptography]==3.3.0",
+
     # Utilities
     "python-dotenv==1.0.1",
     "structlog==25.5.0",

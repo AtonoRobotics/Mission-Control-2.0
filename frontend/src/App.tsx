@@ -23,7 +23,10 @@ import AgentsPage from '@/pages/AgentsPage';
 import InfraPage from '@/pages/InfraPage';
 import RegistryPage from '@/pages/RegistryPage';
 import PipelinesPage from '@/pages/PipelinesPage';
-import RobotsPage from '@/pages/RobotsPage';
+import RobotListPanel from '@/panels/robots/RobotListPanel';
+import RobotConfigPanel from '@/panels/robots/RobotConfigPanel';
+import RobotIsaacPanel from '@/panels/robots/RobotIsaacPanel';
+import RobotRealPanel from '@/panels/robots/RobotRealPanel';
 
 // Register all panels
 registerPanel({ id: 'viewport3d', title: '3D Viewport', category: '3d-spatial', component: Viewport3D, platforms: ['web', 'desktop'] });
@@ -38,7 +41,10 @@ registerPanel({ id: 'agents', title: 'Agents', category: 'infrastructure', compo
 registerPanel({ id: 'infra', title: 'Infrastructure', category: 'infrastructure', component: InfraPage, platforms: ['web', 'desktop'] });
 registerPanel({ id: 'registry', title: 'Registry', category: 'project', component: RegistryPage, platforms: ['web', 'desktop'] });
 registerPanel({ id: 'pipelines', title: 'Pipelines', category: 'project', component: PipelinesPage, platforms: ['web', 'desktop'] });
-registerPanel({ id: 'robots', title: 'Robots', category: 'ros2-control', component: RobotsPage, platforms: ['web', 'desktop'] });
+registerPanel({ id: 'robot-list', title: 'Robot List', category: 'ros2-control', component: RobotListPanel, platforms: ['web', 'desktop'] });
+registerPanel({ id: 'robot-config', title: 'Robot Config', category: 'ros2-control', component: RobotConfigPanel, platforms: ['web', 'desktop'] });
+registerPanel({ id: 'robot-isaac', title: 'Isaac Pipeline', category: 'isaac', component: RobotIsaacPanel, platforms: ['web', 'desktop'] });
+registerPanel({ id: 'robot-real', title: 'Real Robot', category: 'ros2-control', component: RobotRealPanel, platforms: ['web', 'desktop'] });
 
 // Register all display types
 initDisplays();

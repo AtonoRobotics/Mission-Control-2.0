@@ -29,6 +29,34 @@ class BlobReadable {
   }
 }
 
+// HTTP Range-based IReadable for S3/presigned URLs
+class HttpReadable {
+  private _size: bigint | null = null;
+  constructor(private url: string) {}
+
+  async size(): Promise<bigint> {
+    if (this._size !== null) return this._size;
+    const resp = await fetch(this.url, { method: 'HEAD' });
+    if (!resp.ok) throw new Error(`HEAD failed: ${resp.status}`);
+    const len = resp.headers.get('content-length');
+    this._size = len ? BigInt(len) : 0n;
+    return this._size;
+  }
+
+  async read(offset: bigint, size: bigint): Promise<Uint8Array> {
+    const start = Number(offset);
+    const end = start + Number(size) - 1;
+    const resp = await fetch(this.url, {
+      headers: { Range: `bytes=${start}-${end}` },
+    });
+    if (!resp.ok && resp.status !== 206) {
+      throw new Error(`Range request failed: ${resp.status}`);
+    }
+    const buffer = await resp.arrayBuffer();
+    return new Uint8Array(buffer);
+  }
+}
+
 interface SubscriptionEntry {
   topic: string;
   callback: MessageCallback;
@@ -38,7 +66,7 @@ export class McapDataSource implements DataSource {
   readonly type = 'mcap' as const;
 
   private reader: McapIndexedReader | null = null;
-  private file: File;
+  private source: File | string; // File for local, URL string for S3
   private topics: TopicInfo[] = [];
   private channelsByTopic = new Map<string, TypedMcapRecords['Channel']>();
   private schemasByChannel = new Map<number, TypedMcapRecords['Schema']>();
@@ -63,8 +91,8 @@ export class McapDataSource implements DataSource {
   // Message cache: topic → messages sorted by logTime
   private messagesByTopic = new Map<string, TypedMcapRecords['Message'][]>();
 
-  constructor(file: File) {
-    this.file = file;
+  constructor(source: File | string) {
+    this.source = source;
   }
 
   get status(): ConnectionStatus {
@@ -79,7 +107,10 @@ export class McapDataSource implements DataSource {
   async connect(): Promise<void> {
     this.setStatus('connecting');
     try {
-      const readable = new BlobReadable(this.file);
+      const readable =
+        typeof this.source === 'string'
+          ? new HttpReadable(this.source)
+          : new BlobReadable(this.source);
       this.reader = await McapIndexedReader.Initialize({ readable });
       this.buildIndex();
       this.setStatus('connected');

@@ -28,6 +28,25 @@ import RobotIsaacPanel from '@/panels/robots/RobotIsaacPanel';
 import RobotRealPanel from '@/panels/robots/RobotRealPanel';
 import RawMessagesPanel from '@/panels/RawMessages/RawMessagesPanel';
 import PlotPanel from '@/panels/Plot/PlotPanel';
+import LogViewerPanel from '@/panels/LogViewer/LogViewerPanel';
+import DiagnosticsPanel from '@/panels/Diagnostics/DiagnosticsPanel';
+import TablePanel from '@/panels/Table/TablePanel';
+import StateTransitionsPanel from '@/panels/StateTransitions/StateTransitionsPanel';
+import GaugePanel from '@/panels/Gauge/GaugePanel';
+import IndicatorPanel from '@/panels/Indicator/IndicatorPanel';
+import PublishPanel from '@/panels/Publish/PublishPanel';
+import ServiceCallPanel from '@/panels/ServiceCall/ServiceCallPanel';
+import ParametersPanel from '@/panels/Parameters/ParametersPanel';
+import TeleopPanel from '@/panels/Teleop/TeleopPanel';
+import ImagePanel from '@/panels/Image/ImagePanel';
+import MapPanel from '@/panels/Map/MapPanel';
+import UserScriptPanel from '@/panels/UserScript/UserScriptPanel';
+import VariableSliderPanel from '@/panels/VariableSlider/VariableSliderPanel';
+import MarkdownPanel from '@/panels/Markdown/MarkdownPanel';
+import DataSourceInfoPanel from '@/panels/DataSourceInfo/DataSourceInfoPanel';
+import ActionMonitorPanel from '@/panels/ActionMonitor/ActionMonitorPanel';
+import LatencyMonitorPanel from '@/panels/LatencyMonitor/LatencyMonitorPanel';
+import FrequencyMonitorPanel from '@/panels/FrequencyMonitor/FrequencyMonitorPanel';
 
 // Register all panels
 registerPanel({ id: 'viewport3d', title: '3D Viewport', category: '3d-spatial', component: Viewport3D, platforms: ['web', 'desktop'] });
@@ -48,6 +67,25 @@ registerPanel({ id: 'robot-isaac', title: 'Isaac Pipeline', category: 'isaac', c
 registerPanel({ id: 'robot-real', title: 'Real Robot', category: 'ros2-control', component: RobotRealPanel, platforms: ['web', 'desktop'] });
 registerPanel({ id: 'raw-messages', title: 'Raw Messages', category: 'data', component: RawMessagesPanel, platforms: ['web', 'desktop'] });
 registerPanel({ id: 'plot', title: 'Plot', category: 'data', component: PlotPanel, platforms: ['web', 'desktop'] });
+registerPanel({ id: 'log-viewer', title: 'Log Viewer', category: 'ros2-inspect', component: LogViewerPanel, platforms: ['web', 'desktop'] });
+registerPanel({ id: 'diagnostics', title: 'Diagnostics', category: 'diagnostics', component: DiagnosticsPanel, platforms: ['web', 'desktop'] });
+registerPanel({ id: 'table', title: 'Table', category: 'data', component: TablePanel, platforms: ['web', 'desktop'] });
+registerPanel({ id: 'state-transitions', title: 'State Transitions', category: 'data', component: StateTransitionsPanel, platforms: ['web', 'desktop'] });
+registerPanel({ id: 'gauge', title: 'Gauge', category: 'data', component: GaugePanel, platforms: ['web', 'desktop', 'ios'] });
+registerPanel({ id: 'indicator', title: 'Indicator', category: 'data', component: IndicatorPanel, platforms: ['web', 'desktop', 'ios'] });
+registerPanel({ id: 'publish', title: 'Publish', category: 'ros2-control', component: PublishPanel, platforms: ['web', 'desktop'], requiresLiveData: true });
+registerPanel({ id: 'service-call', title: 'Service Call', category: 'ros2-control', component: ServiceCallPanel, platforms: ['web', 'desktop'], requiresLiveData: true });
+registerPanel({ id: 'parameters', title: 'Parameters', category: 'ros2-inspect', component: ParametersPanel, platforms: ['web', 'desktop'], requiresLiveData: true });
+registerPanel({ id: 'teleop', title: 'Teleop', category: 'ros2-control', component: TeleopPanel, platforms: ['web', 'desktop', 'ios'], requiresLiveData: true });
+registerPanel({ id: 'image', title: 'Image', category: 'sensors', component: ImagePanel, platforms: ['web', 'desktop', 'ios'] });
+registerPanel({ id: 'map', title: 'Map', category: 'sensors', component: MapPanel, platforms: ['web', 'desktop', 'ios'] });
+registerPanel({ id: 'user-script', title: 'User Script', category: 'utility', component: UserScriptPanel, platforms: ['web', 'desktop'] });
+registerPanel({ id: 'variable-slider', title: 'Variable Slider', category: 'utility', component: VariableSliderPanel, platforms: ['web', 'desktop', 'ios'] });
+registerPanel({ id: 'markdown', title: 'Markdown', category: 'utility', component: MarkdownPanel, platforms: ['web', 'desktop', 'ios'] });
+registerPanel({ id: 'data-source-info', title: 'Data Source Info', category: 'utility', component: DataSourceInfoPanel, platforms: ['web', 'desktop', 'ios'] });
+registerPanel({ id: 'action-monitor', title: 'Action Monitor', category: 'ros2-inspect', component: ActionMonitorPanel, platforms: ['web', 'desktop'] });
+registerPanel({ id: 'latency-monitor', title: 'Latency Monitor', category: 'diagnostics', component: LatencyMonitorPanel, platforms: ['web', 'desktop'] });
+registerPanel({ id: 'frequency-monitor', title: 'Frequency Monitor', category: 'diagnostics', component: FrequencyMonitorPanel, platforms: ['web', 'desktop', 'ios'] });
 
 // Register all display types
 initDisplays();

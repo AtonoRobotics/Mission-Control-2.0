@@ -5,6 +5,7 @@
 
 import { create } from 'zustand';
 import type { MosaicNode, MosaicDirection } from 'react-mosaic-component';
+import { toSavedLayouts } from '@/layouts/defaults';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -91,7 +92,7 @@ const DEFAULT_PANEL_CONFIGS: Record<string, PanelInstance> = {
 export const useLayoutStore = create<LayoutState>((set, get) => ({
   layout: DEFAULT_LAYOUT,
   panelConfigs: { ...DEFAULT_PANEL_CONFIGS },
-  savedLayouts: [],
+  savedLayouts: toSavedLayouts(),
   activeLayoutId: null,
   variables: {},
 

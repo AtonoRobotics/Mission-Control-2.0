@@ -47,19 +47,21 @@ describe('layoutStore', () => {
 
   test('saveLayout and loadLayout round-trip', () => {
     const store = useLayoutStore.getState();
+    const countBefore = useLayoutStore.getState().savedLayouts.length;
     store.saveLayout('My Layout');
 
     let state = useLayoutStore.getState();
-    expect(state.savedLayouts).toHaveLength(1);
-    expect(state.savedLayouts[0].name).toBe('My Layout');
+    expect(state.savedLayouts).toHaveLength(countBefore + 1);
+    const myLayout = state.savedLayouts.find((l) => l.name === 'My Layout');
+    expect(myLayout).toBeDefined();
 
     // Modify current layout
     store.addPanel('log');
 
     // Load saved
-    store.loadLayout(state.savedLayouts[0].id);
+    store.loadLayout(myLayout!.id);
     state = useLayoutStore.getState();
-    expect(state.activeLayoutId).toBe(state.savedLayouts[0].id);
+    expect(state.activeLayoutId).toBe(myLayout!.id);
   });
 
   test('deleteLayout removes saved layout', () => {

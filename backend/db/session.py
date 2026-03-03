@@ -81,6 +81,23 @@ async def get_empirical_session() -> AsyncGenerator[AsyncSession, None]:
         yield session
 
 
+from contextlib import asynccontextmanager
+
+
+@asynccontextmanager
+async def get_registry_session_context() -> AsyncGenerator[AsyncSession, None]:
+    """Standalone async context manager for background tasks (not FastAPI deps)."""
+    if _RegistrySession is None:
+        raise RuntimeError("Database engines not initialized. Call init_engines() first.")
+    async with _RegistrySession() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+
+
 def get_registry_engine():
     return _registry_engine
 

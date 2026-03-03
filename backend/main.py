@@ -15,10 +15,13 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from fastapi import Depends
+
 from core.settings import get_settings
 from core.integrity import run_startup_integrity_check, has_critical_failures
 from db.session import init_engines, dispose_engines, get_registry_engine, get_empirical_engine
 from rosbridge.client import RosBridgeClient
+from middleware.auth import require_role
 from api import auth, users, ros2, isaac, containers, registry, builds, workflows, agents, compute, empirical, pipelines, recordings, cloud, layouts, components, osmo
 
 logger = structlog.get_logger(__name__)
@@ -97,23 +100,29 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ── Auth routes — public (login/register must work without a token) ────────
 app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
-app.include_router(users.router, prefix="/api/users", tags=["Users"])
-app.include_router(ros2.router, prefix="/api/ros2", tags=["ROS2"])
-app.include_router(isaac.router, prefix="/api/isaac", tags=["Isaac"])
-app.include_router(containers.router, prefix="/api/containers", tags=["Containers"])
-app.include_router(registry.router, prefix="/api/registry", tags=["Registry"])
-app.include_router(builds.router, prefix="/api/builds", tags=["Builds"])
-app.include_router(workflows.router, prefix="/api/workflows", tags=["Workflows"])
-app.include_router(agents.router, prefix="/api/agents", tags=["Agents"])
-app.include_router(compute.router, prefix="/api/compute", tags=["Compute"])
-app.include_router(empirical.router, prefix="/api/empirical", tags=["Empirical"])
-app.include_router(pipelines.router, prefix="/api/pipelines", tags=["Pipelines"])
-app.include_router(recordings.router, prefix="/api/recordings", tags=["Recordings"])
-app.include_router(cloud.router, prefix="/api/cloud", tags=["Cloud"])
-app.include_router(layouts.router, prefix="/api/layouts", tags=["Layouts"])
-app.include_router(components.router, prefix="/api/components", tags=["Components"])
-app.include_router(osmo.router, prefix="/api/osmo", tags=["OSMO"])
+
+# ── All other routes — require authenticated user (minimum: viewer) ────────
+_viewer = [Depends(require_role("viewer"))]
+_operator = [Depends(require_role("operator"))]
+
+app.include_router(users.router, prefix="/api/users", tags=["Users"], dependencies=_viewer)
+app.include_router(ros2.router, prefix="/api/ros2", tags=["ROS2"], dependencies=_viewer)
+app.include_router(isaac.router, prefix="/api/isaac", tags=["Isaac"], dependencies=_viewer)
+app.include_router(containers.router, prefix="/api/containers", tags=["Containers"], dependencies=_operator)
+app.include_router(registry.router, prefix="/api/registry", tags=["Registry"], dependencies=_viewer)
+app.include_router(builds.router, prefix="/api/builds", tags=["Builds"], dependencies=_viewer)
+app.include_router(workflows.router, prefix="/api/workflows", tags=["Workflows"], dependencies=_viewer)
+app.include_router(agents.router, prefix="/api/agents", tags=["Agents"], dependencies=_viewer)
+app.include_router(compute.router, prefix="/api/compute", tags=["Compute"], dependencies=_viewer)
+app.include_router(empirical.router, prefix="/api/empirical", tags=["Empirical"], dependencies=_viewer)
+app.include_router(pipelines.router, prefix="/api/pipelines", tags=["Pipelines"], dependencies=_viewer)
+app.include_router(recordings.router, prefix="/api/recordings", tags=["Recordings"], dependencies=_viewer)
+app.include_router(cloud.router, prefix="/api/cloud", tags=["Cloud"], dependencies=_viewer)
+app.include_router(layouts.router, prefix="/api/layouts", tags=["Layouts"], dependencies=_viewer)
+app.include_router(components.router, prefix="/api/components", tags=["Components"], dependencies=_viewer)
+app.include_router(osmo.router, prefix="/api/osmo", tags=["OSMO"], dependencies=_operator)
 
 
 @app.get("/health")

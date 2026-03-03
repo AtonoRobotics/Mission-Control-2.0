@@ -1,0 +1,19 @@
+{
+  "name": "mission-control",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Mission Control — Cinema Robot Digital Twin Platform",
+  "scripts": {
+    "dev": "pnpm --filter mission-control-frontend dev",
+    "build": "pnpm --filter mission-control-frontend build",
+    "typecheck": "pnpm --filter mission-control-frontend typecheck",
+    "lint": "pnpm --filter mission-control-frontend lint",
+    "dev:all": "pnpm -r --parallel dev",
+    "build:all": "pnpm -r build",
+    "clean": "pnpm -r exec rm -rf dist node_modules/.vite"
+  },
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=9"
+  }
+}

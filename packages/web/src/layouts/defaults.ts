@@ -1,10 +1,11 @@
 /**
  * Mission Control — Default Layout Presets
- * Sensible workspace configurations for common workflows.
+ * One layout per workspace mode (build, scene, motion, simulate, deploy, monitor).
  */
 
 import type { MosaicNode } from 'react-mosaic-component';
 import type { SavedLayout, PanelInstance } from '@/stores/layoutStore';
+import type { WorkspaceMode } from '@/stores/navStore';
 
 interface LayoutPreset {
   id: string;
@@ -17,130 +18,125 @@ function pc(type: string): PanelInstance {
   return { type, config: {} };
 }
 
-export const DEFAULT_LAYOUTS: LayoutPreset[] = [
-  {
-    id: 'overview',
-    name: 'Overview',
-    layout: {
-      direction: 'row',
-      first: 'overview',
-      second: {
-        direction: 'column',
-        first: 'fleet-status',
-        second: 'compute-monitor',
-        splitPercentage: 50,
-      },
-      splitPercentage: 55,
-    },
-    panelConfigs: {
-      overview: pc('overview'),
-      'fleet-status': pc('fleet-status'),
-      'compute-monitor': pc('compute-monitor'),
-    },
-  },
-  {
-    id: '3d-monitoring',
-    name: '3D Monitoring',
-    layout: {
-      direction: 'row',
-      first: {
-        direction: 'column',
-        first: 'displays',
-        second: 'topics',
-        splitPercentage: 60,
-      },
-      second: {
-        direction: 'row',
-        first: 'viewport3d',
-        second: 'properties',
-        splitPercentage: 80,
-      },
-      splitPercentage: 18,
-    },
-    panelConfigs: {
-      viewport3d: pc('viewport3d'),
-      displays: pc('displays'),
-      topics: pc('topics'),
-      properties: pc('properties'),
-    },
-  },
-  {
-    id: 'robot-builder',
-    name: 'Robot Builder',
+export const WORKSPACE_LAYOUTS: Record<WorkspaceMode, LayoutPreset> = {
+  build: {
+    id: 'build',
+    name: 'Build',
     layout: {
       direction: 'row',
       first: 'robot-list',
-      second: 'robot-config',
+      second: {
+        direction: 'row',
+        first: 'robot-config',
+        second: 'viewport3d',
+        splitPercentage: 57, // 40/(40+30)
+      },
       splitPercentage: 30,
     },
     panelConfigs: {
       'robot-list': pc('robot-list'),
       'robot-config': pc('robot-config'),
+      viewport3d: pc('viewport3d'),
     },
   },
-  {
-    id: 'robot-ops',
-    name: 'Robot Operations',
+  scene: {
+    id: 'scene',
+    name: 'Scene',
     layout: {
       direction: 'row',
-      first: {
+      first: 'viewport3d',
+      second: {
         direction: 'column',
-        first: 'robot-isaac',
-        second: 'robot-real',
+        first: 'displays',
+        second: 'properties',
         splitPercentage: 50,
       },
-      second: 'viewport3d-ops',
-      splitPercentage: 50,
+      splitPercentage: 70,
     },
     panelConfigs: {
-      'robot-isaac': pc('robot-isaac'),
-      'robot-real': pc('robot-real'),
-      'viewport3d-ops': pc('viewport3d'),
+      viewport3d: pc('viewport3d'),
+      displays: pc('displays'),
+      properties: pc('properties'),
     },
   },
-  {
-    id: 'pipeline-builder',
-    name: 'Pipeline Builder',
-    layout: 'pipeline-builder',
+  motion: {
+    id: 'motion',
+    name: 'Motion',
+    layout: {
+      direction: 'column',
+      first: 'viewport3d',
+      second: 'pipeline-builder',
+      splitPercentage: 60,
+    },
     panelConfigs: {
+      viewport3d: pc('viewport3d'),
       'pipeline-builder': pc('pipeline-builder'),
     },
   },
-  {
-    id: 'osmo-workflows',
-    name: 'OSMO Workflows',
-    layout: 'osmo-workflows',
-    panelConfigs: {
-      'osmo-workflows': pc('osmo-workflows'),
-    },
-  },
-  {
-    id: 'debug',
-    name: 'Debug',
+  simulate: {
+    id: 'simulate',
+    name: 'Simulate',
     layout: {
       direction: 'row',
-      first: {
-        direction: 'column',
-        first: 'topics-debug',
-        second: 'rqtGraph-debug',
-        splitPercentage: 40,
-      },
+      first: 'viewport3d',
       second: {
         direction: 'column',
-        first: 'actionGraph-debug',
-        second: 'agent-monitor-debug',
+        first: 'robot-isaac',
+        second: 'diagnostics',
         splitPercentage: 50,
       },
       splitPercentage: 50,
     },
     panelConfigs: {
-      'topics-debug': pc('topics'),
-      'rqtGraph-debug': pc('rqtGraph'),
-      'actionGraph-debug': pc('actionGraph'),
-      'agent-monitor-debug': pc('agent-monitor'),
+      viewport3d: pc('viewport3d'),
+      'robot-isaac': pc('robot-isaac'),
+      diagnostics: pc('diagnostics'),
     },
   },
-];
+  deploy: {
+    id: 'deploy',
+    name: 'Deploy',
+    layout: {
+      direction: 'row',
+      first: 'fleet-status',
+      second: {
+        direction: 'column',
+        first: 'robot-real',
+        second: 'agent-monitor',
+        splitPercentage: 50,
+      },
+      splitPercentage: 50,
+    },
+    panelConfigs: {
+      'fleet-status': pc('fleet-status'),
+      'robot-real': pc('robot-real'),
+      'agent-monitor': pc('agent-monitor'),
+    },
+  },
+  monitor: {
+    id: 'monitor',
+    name: 'Monitor',
+    layout: {
+      direction: 'row',
+      first: 'overview',
+      second: {
+        direction: 'row',
+        first: 'fleet-status',
+        second: 'diagnostics',
+        splitPercentage: 50,
+      },
+      splitPercentage: 40,
+    },
+    panelConfigs: {
+      overview: pc('overview'),
+      'fleet-status': pc('fleet-status'),
+      diagnostics: pc('diagnostics'),
+    },
+  },
+};
+
+/** Backward-compatible array of all workspace layouts */
+export const DEFAULT_LAYOUTS: LayoutPreset[] = Object.values(WORKSPACE_LAYOUTS);
 
 export function toSavedLayouts(): SavedLayout[] {
   return DEFAULT_LAYOUTS.map((l) => ({

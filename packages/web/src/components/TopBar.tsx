@@ -8,19 +8,40 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useLayoutStore } from '@/stores/layoutStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useConnectionStatus, useDataSource, useDataSourceSwitch } from '@/data-source/hooks';
+import { useNavStore, type WorkspaceMode } from '@/stores/navStore';
+import { WORKSPACE_LAYOUTS } from '@/layouts/defaults';
 import PanelCatalog from './PanelCatalog';
+
+const WORKSPACE_MODES: WorkspaceMode[] = [
+  'build',
+  'scene',
+  'motion',
+  'simulate',
+  'deploy',
+  'monitor',
+];
 
 export default function TopBar() {
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [layoutMenuOpen, setLayoutMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
-  const { savedLayouts, activeLayoutId, loadLayout, saveLayout, deleteLayout, resetLayout } =
+  const { savedLayouts, activeLayoutId, loadLayout, saveLayout, deleteLayout, resetLayout, setLayout: setMosaicLayout } =
     useLayoutStore();
   const { user, logout } = useAuthStore();
+  const { activeMode, setMode } = useNavStore();
   const connectionStatus = useConnectionStatus();
   const dataSource = useDataSource();
   const { switchToLive, switchToMcap } = useDataSourceSwitch();
+
+  const handleModeClick = useCallback((mode: WorkspaceMode) => {
+    setMode(mode);
+    // Load the workspace default layout for this mode
+    const preset = WORKSPACE_LAYOUTS[mode];
+    if (preset) {
+      loadLayout(preset.id);
+    }
+  }, [setMode, loadLayout]);
 
   const handleOpenMcap = useCallback(() => {
     const input = document.createElement('input');
@@ -59,6 +80,46 @@ export default function TopBar() {
         >
           MISSION CONTROL
         </span>
+
+        {/* Workspace mode tabs */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          {WORKSPACE_MODES.map((mode) => (
+            <button
+              key={mode}
+              onClick={() => handleModeClick(mode)}
+              style={{
+                padding: '4px 10px',
+                fontSize: 11,
+                fontWeight: 600,
+                letterSpacing: 0.5,
+                textTransform: 'uppercase',
+                color: activeMode === mode ? 'var(--accent)' : 'var(--text-tertiary, #666)',
+                background: activeMode === mode ? 'var(--accent-dim)' : 'transparent',
+                border: 'none',
+                borderBottom: activeMode === mode ? '2px solid var(--accent)' : '2px solid transparent',
+                cursor: 'pointer',
+                transition: 'color 0.15s, background 0.15s',
+              }}
+              onMouseEnter={(e) => {
+                if (activeMode !== mode) {
+                  e.currentTarget.style.color = 'var(--text-secondary)';
+                  e.currentTarget.style.background = 'var(--bg-surface-2)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (activeMode !== mode) {
+                  e.currentTarget.style.color = 'var(--text-tertiary, #666)';
+                  e.currentTarget.style.background = 'transparent';
+                }
+              }}
+            >
+              {mode}
+            </button>
+          ))}
+        </div>
+
+        {/* Separator */}
+        <div style={{ width: 1, height: 20, background: 'var(--border-subtle, #333)', margin: '0 4px' }} />
 
         {/* Layout selector */}
         <DropdownButton

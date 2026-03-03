@@ -1,23 +1,19 @@
 import { create } from 'zustand';
 
-export type PageId =
-  | 'overview'
-  | 'viewer3d'
-  | 'actionGraph'
-  | 'rqtGraph'
-  | 'robots'
-  | 'fleet'
-  | 'agents'
-  | 'infrastructure'
-  | 'registry'
-  | 'pipelines';
+export type WorkspaceMode =
+  | 'build'
+  | 'scene'
+  | 'motion'
+  | 'simulate'
+  | 'deploy'
+  | 'monitor';
 
 interface NavState {
-  activePage: PageId;
-  setPage: (page: PageId) => void;
+  activeMode: WorkspaceMode;
+  setMode: (mode: WorkspaceMode) => void;
 }
 
 export const useNavStore = create<NavState>((set) => ({
-  activePage: 'overview',
-  setPage: (page) => set({ activePage: page }),
+  activeMode: 'monitor',
+  setMode: (mode) => set({ activeMode: mode }),
 }));

@@ -1,48 +1,29 @@
-import { useNavStore, type PageId } from '@/stores/navStore';
+/**
+ * Sidebar — DEPRECATED. Replaced by TopBar workspace mode tabs.
+ * Kept for reference only. Not imported anywhere.
+ */
+
+import { useNavStore, type WorkspaceMode } from '@/stores/navStore';
 import { useRosBridgeStore } from '@/stores/rosBridgeStore';
 
 interface NavItem {
-  id: PageId;
+  id: WorkspaceMode;
   label: string;
   icon: string;
 }
 
-interface NavSection {
-  label: string;
-  items: NavItem[];
-}
-
-const NAV_SECTIONS: NavSection[] = [
-  {
-    label: 'Visualization',
-    items: [
-      { id: 'overview', label: 'Overview', icon: '⬡' },
-      { id: 'viewer3d', label: '3D Viewer', icon: '◎' },
-      { id: 'rqtGraph', label: 'ROS Graph', icon: '⊞' },
-      { id: 'actionGraph', label: 'Action Graph', icon: '⬢' },
-    ],
-  },
-  {
-    label: 'Operations',
-    items: [
-      { id: 'robots', label: 'Robots', icon: '◉' },
-      { id: 'fleet', label: 'Fleet', icon: '▦' },
-      { id: 'agents', label: 'Agents', icon: '⚙' },
-      { id: 'infrastructure', label: 'Infra', icon: '▣' },
-    ],
-  },
-  {
-    label: 'Management',
-    items: [
-      { id: 'registry', label: 'Registry', icon: '◈' },
-      { id: 'pipelines', label: 'Pipelines', icon: '⟐' },
-    ],
-  },
+const NAV_ITEMS: NavItem[] = [
+  { id: 'build', label: 'Build', icon: '◉' },
+  { id: 'scene', label: 'Scene', icon: '◎' },
+  { id: 'motion', label: 'Motion', icon: '⟐' },
+  { id: 'simulate', label: 'Simulate', icon: '⬢' },
+  { id: 'deploy', label: 'Deploy', icon: '▦' },
+  { id: 'monitor', label: 'Monitor', icon: '⬡' },
 ];
 
 export default function Sidebar() {
-  const activePage = useNavStore((s) => s.activePage);
-  const setPage = useNavStore((s) => s.setPage);
+  const activeMode = useNavStore((s) => s.activeMode);
+  const setMode = useNavStore((s) => s.setMode);
   const rosStatus = useRosBridgeStore((s) => s.status);
 
   return (
@@ -62,30 +43,20 @@ export default function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 py-1 overflow-y-auto">
-        {NAV_SECTIONS.map((section) => (
-          <div key={section.label}>
-            <div
-              className="px-4 pt-3 pb-1 text-xs font-semibold uppercase tracking-widest"
-              style={{ color: 'var(--text-muted)', fontSize: '9px' }}
-            >
-              {section.label}
-            </div>
-            {section.items.map((item) => (
-              <button
-                key={item.id}
-                className="w-full flex items-center gap-3 px-4 py-1.5 text-left transition-colors"
-                style={{
-                  color: activePage === item.id ? 'var(--accent)' : 'var(--text-secondary)',
-                  background: activePage === item.id ? 'var(--accent-dim)' : 'transparent',
-                  borderLeft: activePage === item.id ? '2px solid var(--accent)' : '2px solid transparent',
-                }}
-                onClick={() => setPage(item.id)}
-              >
-                <span className="text-sm w-5 text-center">{item.icon}</span>
-                <span className="text-xs font-medium">{item.label}</span>
-              </button>
-            ))}
-          </div>
+        {NAV_ITEMS.map((item) => (
+          <button
+            key={item.id}
+            className="w-full flex items-center gap-3 px-4 py-1.5 text-left transition-colors"
+            style={{
+              color: activeMode === item.id ? 'var(--accent)' : 'var(--text-secondary)',
+              background: activeMode === item.id ? 'var(--accent-dim)' : 'transparent',
+              borderLeft: activeMode === item.id ? '2px solid var(--accent)' : '2px solid transparent',
+            }}
+            onClick={() => setMode(item.id)}
+          >
+            <span className="text-sm w-5 text-center">{item.icon}</span>
+            <span className="text-xs font-medium">{item.label}</span>
+          </button>
         ))}
       </nav>
 

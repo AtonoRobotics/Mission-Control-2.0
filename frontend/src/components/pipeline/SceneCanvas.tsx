@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { useSceneStore, type SceneConfig, type ScenePlacement } from '@/stores/sceneStore';
 import SceneCanvas2D from './SceneCanvas2D';
 import { SceneCanvas3D } from './SceneCanvas3D';
@@ -103,8 +103,19 @@ export default function SceneCanvas({
 }: SceneCanvasProps) {
   const sceneViewMode = useSceneStore((s) => s.sceneViewMode);
   const setSceneViewMode = useSceneStore((s) => s.setSceneViewMode);
+  const nvidiaAssets = useSceneStore((s) => s.nvidiaAssets);
 
   const { placements, name } = sceneConfig;
+
+  // Build asset_id → glb_path map from the NVIDIA asset catalog
+  const glbPathMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    if (!nvidiaAssets) return map;
+    for (const assets of Object.values(nvidiaAssets.categories))
+      for (const a of assets)
+        if (a.glb_path) map[a.id] = a.glb_path;
+    return map;
+  }, [nvidiaAssets]);
 
   /** Handle asset drop from the AssetBrowser — creates a new ScenePlacement */
   const onDropAsset = useCallback(
@@ -193,6 +204,7 @@ export default function SceneCanvas({
               onUpdatePlacement={onUpdatePlacement}
               onDropAsset={onDropAsset}
               onRemovePlacement={onRemovePlacement}
+              glbPathMap={glbPathMap}
             />
           </div>
         )}

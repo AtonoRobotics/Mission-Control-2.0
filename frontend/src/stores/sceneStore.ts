@@ -33,6 +33,7 @@ export interface NvidiaAssetEntry {
   path: string;
   description: string;
   thumbnail: string | null;
+  glb_path: string | null;
 }
 
 export interface NvidiaAssetCatalog {
@@ -196,17 +197,36 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   generateScene: async (prompt, taskType, robotId) => {
     set({ generating: true, generateError: null });
     try {
+      // Submit job
       const res = await fetch('/mc/api/pipelines/scenes/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt, task_type: taskType, robot_id: robotId ?? null }),
       });
       if (!res.ok) {
-        const err = await res.text();
-        throw new Error(err || `HTTP ${res.status}`);
+        const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+        throw new Error(err.detail || `HTTP ${res.status}`);
       }
-      const data: SceneConfig = await res.json();
-      set({ sceneConfig: data, generating: false });
+      const { job_id } = await res.json();
+
+      // Poll until complete or failed
+      const POLL_INTERVAL = 5000;
+      const MAX_POLLS = 120; // 10 minutes max
+      for (let i = 0; i < MAX_POLLS; i++) {
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL));
+        const poll = await fetch(`/mc/api/pipelines/scenes/generate/${job_id}`);
+        if (!poll.ok) throw new Error(`Poll failed: HTTP ${poll.status}`);
+        const job = await poll.json();
+
+        if (job.status === 'completed' && job.result) {
+          set({ sceneConfig: job.result, generating: false });
+          return;
+        }
+        if (job.status === 'failed') {
+          throw new Error(job.error || 'Generation failed');
+        }
+      }
+      throw new Error('Generation timed out');
     } catch (e) {
       set({ generating: false, generateError: e instanceof Error ? e.message : 'Generation failed' });
     }

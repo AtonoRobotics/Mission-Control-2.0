@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { ScenePlacement } from '@/stores/sceneStore';
 
 interface SceneCanvas3DProps {
@@ -9,10 +10,16 @@ interface SceneCanvas3DProps {
   onUpdatePlacement: (id: string, updates: Partial<ScenePlacement>) => void;
   onDropAsset: (assetData: string, canvasX: number, canvasY: number) => void;
   onRemovePlacement: (id: string) => void;
+  glbPathMap: Record<string, string>;
 }
 
 const DEG2RAD = Math.PI / 180;
 const GROUND_PLANE = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+
+// Module-level GLB cache (shared across re-renders)
+const glbCache = new Map<string, THREE.Group>();
+const glbLoadingSet = new Set<string>();
+const gltfLoader = new GLTFLoader();
 
 function createMeshForType(assetType: ScenePlacement['asset_type']): THREE.Mesh {
   switch (assetType) {
@@ -46,17 +53,17 @@ function createMeshForType(assetType: ScenePlacement['asset_type']): THREE.Mesh 
   }
 }
 
-function applyPlacementTransform(mesh: THREE.Mesh, placement: ScenePlacement) {
+function applyPlacementTransform(obj: THREE.Object3D, placement: ScenePlacement) {
   // Scene data: x=right, y=forward, z=up. Three.js: x=right, y=up, z=forward.
-  mesh.position.set(placement.position.x, placement.position.z, placement.position.y);
+  obj.position.set(placement.position.x, placement.position.z, placement.position.y);
   if (placement.asset_type === 'environment') {
-    mesh.rotation.set(
+    obj.rotation.set(
       -Math.PI / 2 + placement.rotation.x * DEG2RAD,
       placement.rotation.z * DEG2RAD,
       placement.rotation.y * DEG2RAD,
     );
   } else {
-    mesh.rotation.set(
+    obj.rotation.set(
       placement.rotation.x * DEG2RAD,
       placement.rotation.z * DEG2RAD,
       placement.rotation.y * DEG2RAD,
@@ -64,12 +71,39 @@ function applyPlacementTransform(mesh: THREE.Mesh, placement: ScenePlacement) {
   }
 }
 
-function setEmissive(mesh: THREE.Mesh, color: number) {
-  const mat = mesh.material;
-  if (mat instanceof THREE.MeshStandardMaterial) {
-    mat.emissive.setHex(color);
-    mat.emissiveIntensity = color === 0 ? 0 : 0.4;
+function setEmissiveRecursive(obj: THREE.Object3D, color: number) {
+  obj.traverse((child) => {
+    if (child instanceof THREE.Mesh) {
+      const mat = child.material;
+      if (mat instanceof THREE.MeshStandardMaterial) {
+        mat.emissive.setHex(color);
+        mat.emissiveIntensity = color === 0 ? 0 : 0.4;
+      }
+    }
+  });
+}
+
+function disposeObject(obj: THREE.Object3D) {
+  obj.traverse((child) => {
+    if (child instanceof THREE.Mesh) {
+      child.geometry?.dispose();
+      if (Array.isArray(child.material)) {
+        child.material.forEach((m) => m.dispose());
+      } else if (child.material) {
+        child.material.dispose();
+      }
+    }
+  });
+}
+
+/** Walk up the parent chain to find the object with a placementId in userData */
+function findPlacementRoot(obj: THREE.Object3D): string | undefined {
+  let current: THREE.Object3D | null = obj;
+  while (current) {
+    if (current.userData.placementId) return current.userData.placementId as string;
+    current = current.parent;
   }
+  return undefined;
 }
 
 // --- Orbit controls: right-click orbit (unless blocked), middle pan, scroll zoom ---
@@ -170,17 +204,19 @@ export const SceneCanvas3D: React.FC<SceneCanvas3DProps> = ({
   onUpdatePlacement: _onUpdatePlacement,
   onDropAsset,
   onRemovePlacement,
+  glbPathMap,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const controlsRef = useRef<SceneOrbitControls | null>(null);
-  const meshMapRef = useRef<Map<string, THREE.Mesh>>(new Map());
+  const meshMapRef = useRef<Map<string, THREE.Object3D>>(new Map());
   const raycasterRef = useRef(new THREE.Raycaster());
   const animIdRef = useRef<number>(0);
 
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null);
+  const [glbLoadCount, setGlbLoadCount] = useState(0);
 
   // Refs for latest props (used in native event handlers)
   const onSelectRef = useRef(onSelectPlacement);
@@ -265,7 +301,7 @@ export const SceneCanvas3D: React.FC<SceneCanvas3DProps> = ({
     };
     animIdRef.current = requestAnimationFrame(animate);
 
-    // --- Raycast helper ---
+    // --- Raycast helper (recursive into children for GLB models) ---
     const raycastAsset = (e: MouseEvent): string | undefined => {
       const rect = container.getBoundingClientRect();
       const mouse = new THREE.Vector2(
@@ -273,10 +309,10 @@ export const SceneCanvas3D: React.FC<SceneCanvas3DProps> = ({
         -((e.clientY - rect.top) / rect.height) * 2 + 1,
       );
       raycasterRef.current.setFromCamera(mouse, camera);
-      const meshes = Array.from(meshMapRef.current.values());
-      const hits = raycasterRef.current.intersectObjects(meshes);
+      const objects = Array.from(meshMapRef.current.values());
+      const hits = raycasterRef.current.intersectObjects(objects, true);
       if (hits.length > 0) {
-        return hits[0].object.userData.placementId as string | undefined;
+        return findPlacementRoot(hits[0].object);
       }
       return undefined;
     };
@@ -361,7 +397,7 @@ export const SceneCanvas3D: React.FC<SceneCanvas3DProps> = ({
     };
   }, []);
 
-  // ---- Sync placement meshes ----
+  // ---- Sync placement meshes (includes GLB loading) ----
   useEffect(() => {
     const scene = sceneRef.current;
     if (!scene) return;
@@ -369,28 +405,70 @@ export const SceneCanvas3D: React.FC<SceneCanvas3DProps> = ({
     const meshMap = meshMapRef.current;
     const currentIds = new Set(placements.map((p) => p.id));
 
-    for (const [id, mesh] of meshMap) {
+    // Remove stale placements
+    for (const [id, obj] of meshMap) {
       if (!currentIds.has(id)) {
-        scene.remove(mesh);
-        mesh.geometry.dispose();
-        if (mesh.material instanceof THREE.Material) mesh.material.dispose();
+        scene.remove(obj);
+        disposeObject(obj);
         meshMap.delete(id);
       }
     }
 
+    // Add or update placements
     for (const placement of placements) {
-      let mesh = meshMap.get(placement.id);
-      if (!mesh) {
-        mesh = createMeshForType(placement.asset_type);
-        mesh.userData.placementId = placement.id;
-        meshMap.set(placement.id, mesh);
-        scene.add(mesh);
+      let obj = meshMap.get(placement.id);
+      const glbPath = glbPathMap[placement.asset_id];
+
+      if (!obj) {
+        // Check if GLB is available and cached
+        if (glbPath && glbCache.has(glbPath)) {
+          const cloned = glbCache.get(glbPath)!.clone();
+          cloned.userData.placementId = placement.id;
+          cloned.userData.isGlb = true;
+          obj = cloned;
+        } else {
+          // Use primitive placeholder
+          obj = createMeshForType(placement.asset_type);
+          obj.userData.placementId = placement.id;
+
+          // Start async GLB load if path available and not already loading
+          if (glbPath && !glbLoadingSet.has(glbPath)) {
+            glbLoadingSet.add(glbPath);
+            gltfLoader.load(
+              glbPath,
+              (gltf) => {
+                glbCache.set(glbPath, gltf.scene);
+                glbLoadingSet.delete(glbPath);
+                // Trigger re-render to swap primitives for real models
+                setGlbLoadCount((c) => c + 1);
+              },
+              undefined,
+              () => {
+                // Load failed — keep primitive, don't retry
+                glbLoadingSet.delete(glbPath);
+              },
+            );
+          }
+        }
+        meshMap.set(placement.id, obj);
+        scene.add(obj);
+      } else if (glbPath && glbCache.has(glbPath) && !obj.userData.isGlb) {
+        // GLB just finished loading — swap primitive for real model
+        scene.remove(obj);
+        disposeObject(obj);
+        const cloned = glbCache.get(glbPath)!.clone();
+        cloned.userData.placementId = placement.id;
+        cloned.userData.isGlb = true;
+        obj = cloned;
+        meshMap.set(placement.id, obj);
+        scene.add(obj);
       }
-      applyPlacementTransform(mesh, placement);
+
+      applyPlacementTransform(obj, placement);
       const isSelected = placement.id === selectedId;
-      setEmissive(mesh, isSelected ? 0xffaa00 : 0);
+      setEmissiveRecursive(obj, isSelected ? 0xffaa00 : 0);
     }
-  }, [placements, selectedId]);
+  }, [placements, selectedId, glbPathMap, glbLoadCount]);
 
   // ---- Context menu handlers ----
   const handleDelete = useCallback(() => {

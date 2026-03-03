@@ -1,0 +1,35 @@
+workflow:
+  name: model-convert
+  resources:
+    default:
+      cpu: 2
+      gpu: 1
+      memory: 16Gi
+      storage: 20Gi
+  tasks:
+  - name: convert
+    image: nvcr.io/nvidia/tensorrt:25.03-py3
+    command: ["bash"]
+    args:
+    - "-c"
+    - |
+      echo "=== Model Conversion ==="
+      echo "Input: {{input_model}}"
+      echo "Format: {{output_format}}"
+      echo ""
+      if [ "{{output_format}}" = "tensorrt" ]; then
+        trtexec --onnx={{input_model}} \
+          --saveEngine=/output/model.engine \
+          --fp16 \
+          --workspace=4096
+      elif [ "{{output_format}}" = "onnx" ]; then
+        python3 -c "
+      import torch
+      model = torch.load('{{input_model}}')
+      dummy = torch.randn(1, 3, 224, 224).cuda()
+      torch.onnx.export(model, dummy, '/output/model.onnx')
+      print('ONNX export complete')
+      "
+      fi
+      echo "=== Conversion Complete ==="
+      ls -lh /output/

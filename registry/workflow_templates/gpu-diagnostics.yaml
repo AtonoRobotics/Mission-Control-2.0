@@ -1,0 +1,36 @@
+workflow:
+  name: gpu-diagnostics
+  resources:
+    default:
+      cpu: 1
+      gpu: 1
+      memory: 4Gi
+      storage: 2Gi
+  tasks:
+  - name: gpu-info
+    image: nvidia/cuda:12.8.0-base-ubuntu24.04
+    command: ["bash"]
+    args:
+    - "-c"
+    - |
+      echo "=== GPU Diagnostics ==="
+      echo "Hostname: $(hostname)"
+      echo "Architecture: $(uname -m)"
+      echo "Kernel: $(uname -r)"
+      echo ""
+      echo "=== nvidia-smi ==="
+      nvidia-smi 2>/dev/null || echo "nvidia-smi not available (Tegra platform?)"
+      echo ""
+      echo "=== GPU Devices ==="
+      nvidia-smi -L 2>/dev/null || ls /dev/nvidia* 2>/dev/null || echo "No GPU devices found"
+      echo ""
+      echo "=== CUDA Version ==="
+      nvcc --version 2>/dev/null || cat /usr/local/cuda/version.txt 2>/dev/null || echo "CUDA not in PATH"
+      echo ""
+      echo "=== Memory ==="
+      free -h
+      echo ""
+      echo "=== Disk ==="
+      df -h /
+      echo ""
+      echo "=== Complete ==="

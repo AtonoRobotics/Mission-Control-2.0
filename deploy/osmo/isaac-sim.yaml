@@ -1,0 +1,36 @@
+version: 2
+workflow:
+  groups:
+  - name: isaac-sim-group
+    tasks:
+    - name: isaac-sim
+      image: nvcr.io/nvidia/isaac-sim:5.1.0
+      lead: true
+      command:
+      - bash
+      args:
+      - -c
+      - |
+        echo "=== Isaac Sim 5.1.0 Starting ==="
+        echo "Hostname: $(hostname)"
+        nvidia-smi
+        echo ""
+        echo "=== Checking Isaac Sim installation ==="
+        python3 -c "
+        from isaacsim import SimulationApp
+        sim = SimulationApp({'headless': True})
+        print('Isaac Sim initialized successfully')
+        import omni.usd
+        ctx = omni.usd.get_context()
+        print(f'USD context ready: {ctx is not None}')
+        sim.close()
+        print('=== Isaac Sim test complete ===')
+        "
+  name: isaac-sim-test
+  resources:
+    default:
+      cpu: 4
+      gpu: 1
+      memory: 16Gi
+      platform: default
+      storage: 10Gi

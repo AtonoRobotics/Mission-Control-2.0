@@ -107,6 +107,14 @@ export const DEFAULT_LAYOUTS: LayoutPreset[] = [
     },
   },
   {
+    id: 'osmo-workflows',
+    name: 'OSMO Workflows',
+    layout: 'osmo-workflows',
+    panelConfigs: {
+      'osmo-workflows': pc('osmo-workflows'),
+    },
+  },
+  {
     id: 'debug',
     name: 'Debug',
     layout: {

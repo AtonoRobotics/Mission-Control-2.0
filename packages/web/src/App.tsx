@@ -22,6 +22,7 @@ import AgentsPage from '@/pages/AgentsPage';
 import InfraPage from '@/pages/InfraPage';
 import RegistryPage from '@/pages/RegistryPage';
 import PipelinesPage from '@/pages/PipelinesPage';
+import OSMOPage from '@/pages/OSMOPage';
 import RobotListPanel from '@/panels/robots/RobotListPanel';
 import RobotConfigPanel from '@/panels/robots/RobotConfigPanel';
 import RobotIsaacPanel from '@/panels/robots/RobotIsaacPanel';
@@ -67,6 +68,7 @@ registerPanel({ id: 'agent-monitor', title: 'Agent Monitor', category: 'infrastr
 registerPanel({ id: 'compute-monitor', title: 'Compute Monitor', category: 'infrastructure', component: InfraPage, platforms: ['web', 'desktop'] });
 registerPanel({ id: 'registry-browser', title: 'Registry Browser', category: 'project', component: RegistryPage, platforms: ['web', 'desktop'] });
 registerPanel({ id: 'pipeline-builder', title: 'Pipeline Builder', category: 'project', component: PipelinesPage, platforms: ['web', 'desktop'] });
+registerPanel({ id: 'osmo-workflows', title: 'OSMO Workflows', category: 'project', component: OSMOPage, platforms: ['web', 'desktop'] });
 registerPanel({ id: 'robot-list', title: 'Robot List', category: 'ros2-control', component: RobotListPanel, platforms: ['web', 'desktop'] });
 registerPanel({ id: 'robot-config', title: 'Robot Config', category: 'ros2-control', component: RobotConfigPanel, platforms: ['web', 'desktop'] });
 registerPanel({ id: 'robot-isaac', title: 'Isaac Pipeline', category: 'isaac', component: RobotIsaacPanel, platforms: ['web', 'desktop'] });

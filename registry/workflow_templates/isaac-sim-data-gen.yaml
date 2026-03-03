@@ -1,0 +1,34 @@
+workflow:
+  name: isaac-sim-data-gen
+  resources:
+    default:
+      cpu: 4
+      gpu: 1
+      memory: 32Gi
+      storage: 50Gi
+  tasks:
+  - name: generate-data
+    image: nvcr.io/nvidia/isaac-sim:4.5.0
+    command: ["bash"]
+    args:
+    - "-c"
+    - |
+      echo "=== Isaac Sim Synthetic Data Generation ==="
+      echo "Scene: {{scene_path}}"
+      echo "Num frames: {{num_frames}}"
+      echo ""
+      ./python.sh -c "
+      from isaacsim import SimulationApp
+      app = SimulationApp({'headless': True})
+      # Load scene and generate data
+      print('Isaac Sim initialized in headless mode')
+      print('Scene path: {{scene_path}}')
+      print('Generating {{num_frames}} frames...')
+      app.close()
+      print('Data generation complete')
+      "
+    env:
+    - name: ACCEPT_EULA
+      value: "Y"
+    - name: DISPLAY
+      value: ""

@@ -1,0 +1,20 @@
+workflow:
+  name: training-job
+  resources:
+    default:
+      cpu: 4
+      gpu: 1
+      memory: 32Gi
+      storage: 20Gi
+  tasks:
+  - name: train
+    image: "{{image}}"
+    command: ["python3"]
+    args:
+    - "-c"
+    - "{{script}}"
+    env:
+    - name: WANDB_MODE
+      value: "offline"
+    - name: CUDA_VISIBLE_DEVICES
+      value: "0"

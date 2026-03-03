@@ -20,6 +20,13 @@ from db.session import get_registry_session, get_registry_session_context
 from workflow_engine.executor import WorkflowExecutor
 from workflow_engine.graph_parser import WorkflowGraphParser
 from workflow_engine.node_registry import build_node_registry
+from services.osmo_bridge import (
+    pipeline_graph_to_osmo_yaml,
+    submit_pipeline_to_osmo,
+    poll_osmo_status,
+    osmo_status_to_mc,
+    osmo_tasks_to_node_results,
+)
 
 logger = structlog.get_logger(__name__)
 router = APIRouter()
@@ -161,6 +168,35 @@ async def get_graph(
     return graph
 
 
+@router.get("/graphs/{graph_id}/osmo-preview")
+async def preview_osmo_yaml(
+    graph_id: UUID,
+    pool: str = Query("default", description="Target OSMO pool"),
+    session: AsyncSession = Depends(get_registry_session),
+):
+    """Preview the OSMO workflow YAML that would be generated from this graph."""
+    result = await session.execute(
+        select(WorkflowGraphModel).where(WorkflowGraphModel.graph_id == graph_id)
+    )
+    graph = result.scalar_one_or_none()
+    if not graph:
+        raise HTTPException(status_code=404, detail="Workflow graph not found")
+
+    try:
+        osmo_yaml = pipeline_graph_to_osmo_yaml(
+            graph.graph_json, name=graph.name, pool=pool
+        )
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Conversion failed: {e}")
+
+    return {
+        "graph_id": str(graph_id),
+        "name": graph.name,
+        "pool": pool,
+        "osmo_yaml": osmo_yaml,
+    }
+
+
 # =============================================================================
 # Run Endpoints
 # =============================================================================
@@ -186,21 +222,17 @@ async def create_run(
 @router.post("/graphs/{graph_id}/execute", response_model=RunOut, status_code=202)
 async def execute_graph(
     graph_id: UUID,
+    compute_backend: str = Query("local", description="Execution backend: 'local' or 'osmo'"),
+    pool: str = Query("default", description="OSMO pool (only used when backend=osmo)"),
     session: AsyncSession = Depends(get_registry_session),
 ):
-    """Parse a workflow graph and execute it. Returns immediately; execution runs in background."""
+    """Execute a workflow graph. Use compute_backend='osmo' to run on GPU cluster."""
     result = await session.execute(
         select(WorkflowGraphModel).where(WorkflowGraphModel.graph_id == graph_id)
     )
     graph_model = result.scalar_one_or_none()
     if not graph_model:
         raise HTTPException(status_code=404, detail="Workflow graph not found")
-
-    # Parse the stored graph JSON into an executable graph
-    try:
-        parsed = WorkflowGraphParser.from_dict(graph_model.graph_json)
-    except (ValueError, KeyError) as e:
-        raise HTTPException(status_code=422, detail=f"Invalid graph definition: {e}")
 
     # Create DB run record
     db_run = WorkflowRun(
@@ -213,37 +245,87 @@ async def execute_graph(
     await session.refresh(db_run)
     run_id = str(db_run.run_id)
 
-    # Execute in background — update DB when done
-    executor = _get_executor()
-    engine_run = await executor.execute(parsed)
-
-    async def _sync_run_to_db():
-        """Poll engine run status and sync results to DB when complete."""
-        while engine_run.status == "running":
-            await asyncio.sleep(1.0)
-        async with get_registry_session_context() as s:
-            res = await s.execute(
-                select(WorkflowRun).where(WorkflowRun.run_id == run_id)
+    if compute_backend == "osmo":
+        # ── OSMO execution path ──────────────────────────────────────
+        graph_json = graph_model.graph_json
+        osmo_compatible = graph_json.get("osmo_compatible", False)
+        if not osmo_compatible:
+            logger.warning(
+                "osmo_execution_not_compatible",
+                graph_id=str(graph_id),
+                name=graph_model.name,
             )
-            r = res.scalar_one_or_none()
-            if r:
-                r.status = "completed" if engine_run.status == "complete" else "failed"
-                r.completed_at = func.now()
-                r.node_results = {
-                    nid: {
-                        "status": nr.status,
-                        "output": nr.output,
-                        "error": nr.error,
-                        "duration_ms": nr.duration_ms,
+
+        try:
+            osmo_result = await submit_pipeline_to_osmo(
+                graph_json, name=graph_model.name, pool=pool
+            )
+        except Exception as e:
+            logger.error("osmo_submit_failed", error=str(e))
+            raise HTTPException(status_code=502, detail=f"OSMO submission failed: {e}")
+
+        osmo_workflow_id = osmo_result.get("workflow_id") or osmo_result.get("id", "")
+        db_run.node_results = {"_osmo": {"workflow_id": osmo_workflow_id, "pool": pool}}
+        await session.flush()
+
+        async def _sync_osmo_to_db():
+            try:
+                final = await poll_osmo_status(osmo_workflow_id)
+                async with get_registry_session_context() as s:
+                    res = await s.execute(
+                        select(WorkflowRun).where(WorkflowRun.run_id == run_id)
+                    )
+                    r = res.scalar_one_or_none()
+                    if r:
+                        r.status = osmo_status_to_mc(final.get("status", "FAILED"))
+                        r.completed_at = func.now()
+                        r.node_results = {
+                            "_osmo": {"workflow_id": osmo_workflow_id, "pool": pool},
+                            **osmo_tasks_to_node_results(final),
+                        }
+                        await s.commit()
+                        logger.info("osmo_run_synced", run_id=run_id, osmo_id=osmo_workflow_id, status=r.status)
+            except Exception as e:
+                logger.error("osmo_sync_failed", run_id=run_id, error=str(e))
+
+        asyncio.create_task(_sync_osmo_to_db())
+        logger.info("osmo_execution_started", run_id=run_id, osmo_id=osmo_workflow_id, pool=pool)
+    else:
+        # ── Local execution path ─────────────────────────────────────
+        try:
+            parsed = WorkflowGraphParser.from_dict(graph_model.graph_json)
+        except (ValueError, KeyError) as e:
+            raise HTTPException(status_code=422, detail=f"Invalid graph definition: {e}")
+
+        executor = _get_executor()
+        engine_run = await executor.execute(parsed)
+
+        async def _sync_run_to_db():
+            while engine_run.status == "running":
+                await asyncio.sleep(1.0)
+            async with get_registry_session_context() as s:
+                res = await s.execute(
+                    select(WorkflowRun).where(WorkflowRun.run_id == run_id)
+                )
+                r = res.scalar_one_or_none()
+                if r:
+                    r.status = "completed" if engine_run.status == "complete" else "failed"
+                    r.completed_at = func.now()
+                    r.node_results = {
+                        nid: {
+                            "status": nr.status,
+                            "output": nr.output,
+                            "error": nr.error,
+                            "duration_ms": nr.duration_ms,
+                        }
+                        for nid, nr in engine_run.node_results.items()
                     }
-                    for nid, nr in engine_run.node_results.items()
-                }
-                await s.commit()
-                logger.info("workflow_run_synced", run_id=run_id, status=r.status)
+                    await s.commit()
+                    logger.info("workflow_run_synced", run_id=run_id, status=r.status)
 
-    asyncio.create_task(_sync_run_to_db())
+        asyncio.create_task(_sync_run_to_db())
+        logger.info("workflow_execution_started", run_id=run_id, graph_name=graph_model.name, backend="local")
 
-    logger.info("workflow_execution_started", run_id=run_id, graph_name=graph_model.name)
     return db_run
 
 

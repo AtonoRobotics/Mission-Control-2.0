@@ -1,7 +1,4 @@
 import { useEffect } from 'react';
-import { ErrorBoundary } from '@/components/ErrorBoundary';
-import Sidebar from '@/components/Sidebar';
-import { useNavStore } from '@/stores/navStore';
 import { useAuthStore } from '@/stores/authStore';
 import { registerPanel } from '@/panels/panelRegistry';
 import Viewport3D from '@/panels/Viewport3D/Viewport3D';
@@ -16,12 +13,11 @@ import { startTopicPolling, stopTopicPolling } from '@/ros/topicPoller';
 import { connect, getStatus, onStatusChange } from '@/ros/connection';
 import { useRosBridgeStore } from '@/stores/rosBridgeStore';
 import LoginPage from '@/pages/LoginPage';
+import TopBar from '@/components/TopBar';
+import Layout from '@/components/Layout';
 
-// Pages
+// Pages → registered as panels
 import OverviewPage from '@/pages/OverviewPage';
-import Viewer3DPage from '@/pages/Viewer3DPage';
-import RQTGraphPage from '@/pages/RQTGraphPage';
-import ActionGraphPage from '@/pages/ActionGraphPage';
 import FleetPage from '@/pages/FleetPage';
 import AgentsPage from '@/pages/AgentsPage';
 import InfraPage from '@/pages/InfraPage';
@@ -29,35 +25,28 @@ import RegistryPage from '@/pages/RegistryPage';
 import PipelinesPage from '@/pages/PipelinesPage';
 import RobotsPage from '@/pages/RobotsPage';
 
-// Register all panels (for the 3D viewer mosaic)
-registerPanel({ id: 'viewport3d', title: '3D Viewport', component: Viewport3D });
-registerPanel({ id: 'displays', title: 'Displays', component: DisplaySidebar });
-registerPanel({ id: 'topics', title: 'Topics', component: TopicBrowser });
-registerPanel({ id: 'properties', title: 'Properties', component: PropertyEditor });
-registerPanel({ id: 'rqtGraph', title: 'RQT Graph', component: RQTGraphPanel });
-registerPanel({ id: 'actionGraph', title: 'Action Graph', component: ActionGraphPanel });
+// Register all panels
+registerPanel({ id: 'viewport3d', title: '3D Viewport', category: '3d-spatial', component: Viewport3D, platforms: ['web', 'desktop'] });
+registerPanel({ id: 'displays', title: 'Displays', category: '3d-spatial', component: DisplaySidebar, platforms: ['web', 'desktop'] });
+registerPanel({ id: 'topics', title: 'Topics', category: 'ros2-inspect', component: TopicBrowser, platforms: ['web', 'desktop'] });
+registerPanel({ id: 'properties', title: 'Properties', category: 'utility', component: PropertyEditor, platforms: ['web', 'desktop'] });
+registerPanel({ id: 'rqtGraph', title: 'ROS Graph', category: 'ros2-inspect', component: RQTGraphPanel, platforms: ['web', 'desktop'] });
+registerPanel({ id: 'actionGraph', title: 'Action Graph', category: 'ros2-inspect', component: ActionGraphPanel, platforms: ['web', 'desktop'] });
+registerPanel({ id: 'overview', title: 'Overview', category: 'infrastructure', component: OverviewPage, platforms: ['web', 'desktop', 'ios'] });
+registerPanel({ id: 'fleet', title: 'Fleet', category: 'infrastructure', component: FleetPage, platforms: ['web', 'desktop'] });
+registerPanel({ id: 'agents', title: 'Agents', category: 'infrastructure', component: AgentsPage, platforms: ['web', 'desktop'] });
+registerPanel({ id: 'infra', title: 'Infrastructure', category: 'infrastructure', component: InfraPage, platforms: ['web', 'desktop'] });
+registerPanel({ id: 'registry', title: 'Registry', category: 'project', component: RegistryPage, platforms: ['web', 'desktop'] });
+registerPanel({ id: 'pipelines', title: 'Pipelines', category: 'project', component: PipelinesPage, platforms: ['web', 'desktop'] });
+registerPanel({ id: 'robots', title: 'Robots', category: 'ros2-control', component: RobotsPage, platforms: ['web', 'desktop'] });
 
 // Register all display types
 initDisplays();
 
 const tfManager = new TFTreeManager();
 
-const PAGE_COMPONENTS = {
-  overview: OverviewPage,
-  viewer3d: Viewer3DPage,
-  rqtGraph: RQTGraphPage,
-  actionGraph: ActionGraphPage,
-  robots: RobotsPage,
-  fleet: FleetPage,
-  agents: AgentsPage,
-  infrastructure: InfraPage,
-  registry: RegistryPage,
-  pipelines: PipelinesPage,
-} as const;
-
 export default function App() {
   const setStatus = useRosBridgeStore((s) => s.setStatus);
-  const activePage = useNavStore((s) => s.activePage);
   const { isAuthenticated, fetchMe } = useAuthStore();
 
   // Handle OAuth callback query params
@@ -96,15 +85,11 @@ export default function App() {
     return <LoginPage />;
   }
 
-  const PageComponent = PAGE_COMPONENTS[activePage] || OverviewPage;
-
   return (
-    <div className="h-screen w-screen flex viewport-bg">
-      <Sidebar />
+    <div className="h-screen w-screen flex flex-col viewport-bg">
+      <TopBar />
       <div className="flex-1 min-w-0 min-h-0">
-        <ErrorBoundary resetKey={activePage}>
-          <PageComponent />
-        </ErrorBoundary>
+        <Layout />
       </div>
     </div>
   );

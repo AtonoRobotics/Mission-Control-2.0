@@ -3,10 +3,14 @@
  * Loads the web frontend in a native window with dark theme.
  */
 
-import { app, BrowserWindow, Menu } from 'electron';
+import { app, BrowserWindow, Menu, Tray, ipcMain, nativeImage } from 'electron';
 import path from 'path';
+import { registerFileAccessHandlers } from './fileAccess';
+import { loadTokens, storeTokens, clearTokens } from './secureStorage';
+import { setupAutoUpdater, installUpdate } from './autoUpdate';
 
 let mainWindow: BrowserWindow | null = null;
+let tray: Tray | null = null;
 const isDev = process.env.NODE_ENV !== 'production';
 
 function createWindow() {
@@ -69,7 +73,32 @@ const template: Electron.MenuItemConstructorOptions[] = [
 
 Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 
-app.on('ready', createWindow);
+// IPC handlers for secure token storage
+ipcMain.handle('auth:loadTokens', () => loadTokens());
+ipcMain.handle('auth:storeTokens', (_e, access: string, refresh: string) => storeTokens(access, refresh));
+ipcMain.handle('auth:clearTokens', () => clearTokens());
+ipcMain.handle('app:version', () => app.getVersion());
+ipcMain.handle('update:install', () => installUpdate());
+
+app.on('ready', () => {
+  registerFileAccessHandlers();
+  createWindow();
+
+  // System tray
+  const icon = nativeImage.createEmpty();
+  tray = new Tray(icon);
+  tray.setToolTip('Mission Control');
+  tray.on('click', () => {
+    if (mainWindow) {
+      mainWindow.isVisible() ? mainWindow.focus() : mainWindow.show();
+    }
+  });
+
+  // Auto-updater (production only)
+  if (!isDev && mainWindow) {
+    setupAutoUpdater(mainWindow);
+  }
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();

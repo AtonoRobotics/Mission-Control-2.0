@@ -8,10 +8,12 @@
     "dev": "electron . --dev"
   },
   "dependencies": {
-    "@mission-control/core": "workspace:*"
+    "@mission-control/core": "workspace:*",
+    "electron-updater": "^6.3.0"
   },
   "devDependencies": {
     "electron": "^33.0.0",
+    "electron-builder": "^25.0.0",
     "typescript": "^5.5.0"
   }
 }

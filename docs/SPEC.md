@@ -254,7 +254,7 @@ sensor_specs         — sensor hardware specs (type, model, mount offset, intri
 - Never duplicated, never estimated — empirical values only
 - Alembic migrations: `database/empirical/` (separate from registry)
 
-### DB 2 — Mission Control Registry (live — 22 tables)
+### DB 2 — Mission Control Registry (live — 24 tables)
 
 Tracks all artifacts, builds, sessions, auth, and workflow state. Alembic migrations: `database/registry/` (0001–0007).
 
@@ -1226,4 +1226,4 @@ All `lab.*` Workflow Builder nodes are v1 deliverables. Nothing is stubbed.
 ---
 
 *Spec v2.2.0 — 2026-03-03*
-*Both databases live (empirical: 6 tables + CR10 seed, registry: 22 tables at migration 0007). 17 API routers. Monorepo: packages/web + core + desktop + ios. Auth system (JWT + OAuth). OSMO v6.0 deployed on k3s. Cinema motion pipeline foundation complete.*
+*Both databases live (empirical: 6 tables + CR10 seed, registry: 24 tables at migration 0007). 17 API routers. Monorepo: packages/web + core + desktop + ios. Auth system (JWT + OAuth). OSMO v6.0 deployed on k3s. Cinema motion pipeline foundation complete.*

@@ -5,6 +5,7 @@ Thin proxy: MC routes map to OSMO API endpoints with auth + local persistence.
 
 import structlog
 import httpx
+import yaml
 from typing import Any
 
 from core.settings import get_settings
@@ -59,12 +60,36 @@ class OSMOClient:
 
     # -- Workflows -------------------------------------------------------------
 
-    async def submit_workflow(self, workflow_spec: dict) -> dict:
-        """Submit a workflow YAML (as dict) to OSMO."""
+    async def submit_workflow(
+        self, workflow_spec: dict, pool: str = "default"
+    ) -> dict:
+        """Submit a workflow YAML (as dict) to OSMO.
+
+        OSMO v6 TemplateSpec expects {"file": "<yaml-string>"}, not raw JSON.
+        The YAML must have a top-level 'workflow:' key wrapping the spec.
+        """
         headers = await self._ensure_auth()
+        # Ensure the spec is wrapped under 'workflow:' key
+        if "workflow" not in workflow_spec:
+            workflow_spec = {"workflow": workflow_spec}
+        payload = {"file": yaml.dump(workflow_spec, default_flow_style=False)}
         resp = await self._client.post(
-            "/api/workflow/submit",
-            json=workflow_spec,
+            f"/api/pool/{pool}/workflow",
+            json=payload,
+            headers=headers,
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    async def submit_workflow_raw(
+        self, yaml_string: str, pool: str = "default"
+    ) -> dict:
+        """Submit a workflow from a raw YAML string (already formatted)."""
+        headers = await self._ensure_auth()
+        payload = {"file": yaml_string}
+        resp = await self._client.post(
+            f"/api/pool/{pool}/workflow",
+            json=payload,
             headers=headers,
         )
         resp.raise_for_status()
@@ -107,22 +132,24 @@ class OSMOClient:
         return resp.json()
 
     async def workflow_logs(self, workflow_id: str) -> dict:
+        """Get workflow logs — OSMO returns plain text, not JSON."""
         headers = await self._ensure_auth()
         resp = await self._client.get(
             f"/api/workflow/{workflow_id}/logs",
             headers=headers,
         )
         resp.raise_for_status()
-        return resp.json()
+        return {"workflow_id": workflow_id, "logs": resp.text}
 
     async def workflow_error_logs(self, workflow_id: str) -> dict:
+        """Get workflow error logs — OSMO returns plain text, not JSON."""
         headers = await self._ensure_auth()
         resp = await self._client.get(
             f"/api/workflow/{workflow_id}/error_logs",
             headers=headers,
         )
         resp.raise_for_status()
-        return resp.json()
+        return {"workflow_id": workflow_id, "error_logs": resp.text}
 
     # -- Config ----------------------------------------------------------------
 

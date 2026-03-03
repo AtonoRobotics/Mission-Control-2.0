@@ -90,7 +90,7 @@ async def submit_workflow(body: WorkflowSubmit):
     """Submit a workflow to OSMO for execution."""
     osmo = get_osmo_client()
     try:
-        result = await osmo.submit_workflow(body.workflow)
+        result = await osmo.submit_workflow(body.workflow, pool=body.pool)
         logger.info("osmo_workflow_submitted", result=result)
         return result
     except Exception as e:
@@ -99,13 +99,17 @@ async def submit_workflow(body: WorkflowSubmit):
 
 
 @router.post("/workflows/yaml")
-async def submit_workflow_yaml(file: UploadFile = File(...)):
+async def submit_workflow_yaml(
+    file: UploadFile = File(...),
+    pool: str = Query("default", description="Target compute pool"),
+):
     """Submit a workflow from a YAML file upload."""
     osmo = get_osmo_client()
     try:
         content = await file.read()
-        spec = yaml.safe_load(content)
-        result = await osmo.submit_workflow(spec)
+        # Validate it's parseable YAML before sending
+        yaml.safe_load(content)
+        result = await osmo.submit_workflow_raw(content.decode(), pool=pool)
         logger.info("osmo_workflow_yaml_submitted", result=result)
         return result
     except yaml.YAMLError as e:

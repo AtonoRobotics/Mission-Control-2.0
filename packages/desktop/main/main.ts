@@ -8,6 +8,7 @@ import path from 'path';
 import { registerFileAccessHandlers } from './fileAccess';
 import { loadTokens, storeTokens, clearTokens } from './secureStorage';
 import { setupAutoUpdater, installUpdate } from './autoUpdate';
+import { getTailscaleStatus } from './tailscale';
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -79,6 +80,7 @@ ipcMain.handle('auth:storeTokens', (_e, access: string, refresh: string) => stor
 ipcMain.handle('auth:clearTokens', () => clearTokens());
 ipcMain.handle('app:version', () => app.getVersion());
 ipcMain.handle('update:install', () => installUpdate());
+ipcMain.handle('tailscale:status', () => getTailscaleStatus());
 
 app.on('ready', () => {
   registerFileAccessHandlers();

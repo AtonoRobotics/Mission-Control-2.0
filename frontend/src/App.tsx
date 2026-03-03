@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import Sidebar from '@/components/Sidebar';
 import { useNavStore } from '@/stores/navStore';
+import { useAuthStore } from '@/stores/authStore';
 import { registerPanel } from '@/panels/panelRegistry';
 import Viewport3D from '@/panels/Viewport3D/Viewport3D';
 import DisplaySidebar from '@/panels/DisplaySidebar';
@@ -14,6 +15,7 @@ import { TFTreeManager } from '@/ros/tfTree';
 import { startTopicPolling, stopTopicPolling } from '@/ros/topicPoller';
 import { connect, getStatus, onStatusChange } from '@/ros/connection';
 import { useRosBridgeStore } from '@/stores/rosBridgeStore';
+import LoginPage from '@/pages/LoginPage';
 
 // Pages
 import OverviewPage from '@/pages/OverviewPage';
@@ -56,8 +58,27 @@ const PAGE_COMPONENTS = {
 export default function App() {
   const setStatus = useRosBridgeStore((s) => s.setStatus);
   const activePage = useNavStore((s) => s.activePage);
+  const { isAuthenticated, fetchMe } = useAuthStore();
+
+  // Handle OAuth callback query params
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const accessToken = params.get('access_token');
+    const refreshToken = params.get('refresh_token');
+    if (accessToken && refreshToken) {
+      useAuthStore.getState().handleOAuthCallback(accessToken, refreshToken);
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
+
+  // Verify existing token on mount
+  useEffect(() => {
+    fetchMe();
+  }, [fetchMe]);
 
   useEffect(() => {
+    if (!isAuthenticated) return;
+
     connect();
     setStatus(getStatus());
     const unsub = onStatusChange(setStatus);
@@ -69,7 +90,11 @@ export default function App() {
       tfManager.stop();
       stopTopicPolling();
     };
-  }, [setStatus]);
+  }, [setStatus, isAuthenticated]);
+
+  if (!isAuthenticated) {
+    return <LoginPage />;
+  }
 
   const PageComponent = PAGE_COMPONENTS[activePage] || OverviewPage;
 

@@ -72,3 +72,4 @@ packages/desktop/dist-ts/
 packages/desktop/dist/
 packages/web/vite.config.d.ts
 packages/web/vite.config.js
+.worktrees/

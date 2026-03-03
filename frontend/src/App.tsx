@@ -50,6 +50,8 @@ import FrequencyMonitorPanel from '@/panels/FrequencyMonitor/FrequencyMonitorPan
 import BagRecorderPanel from '@/panels/BagRecorder/BagRecorderPanel';
 import McapBrowserPanel from '@/panels/McapBrowser/McapBrowserPanel';
 import CloudSettingsPanel from '@/panels/CloudSettings/CloudSettingsPanel';
+import TeamSettingsPanel from '@/panels/TeamSettings/TeamSettingsPanel';
+import ProfileSettingsPanel from '@/panels/ProfileSettings/ProfileSettingsPanel';
 
 // Register all panels
 registerPanel({ id: 'viewport3d', title: '3D Viewport', category: '3d-spatial', component: Viewport3D, platforms: ['web', 'desktop'] });
@@ -92,6 +94,8 @@ registerPanel({ id: 'frequency-monitor', title: 'Frequency Monitor', category: '
 registerPanel({ id: 'bag-recorder', title: 'Bag Recorder', category: 'recording', component: BagRecorderPanel, platforms: ['web', 'desktop'], requiresLiveData: true });
 registerPanel({ id: 'mcap-browser', title: 'MCAP Browser', category: 'recording', component: McapBrowserPanel, platforms: ['web', 'desktop', 'ios'] });
 registerPanel({ id: 'cloud-settings', title: 'Cloud Settings', category: 'infrastructure', component: CloudSettingsPanel, platforms: ['web', 'desktop'] });
+registerPanel({ id: 'team-settings', title: 'Team Settings', category: 'infrastructure', component: TeamSettingsPanel, platforms: ['web', 'desktop'] });
+registerPanel({ id: 'profile-settings', title: 'Profile', category: 'infrastructure', component: ProfileSettingsPanel, platforms: ['web', 'desktop'] });
 
 // Register all display types
 initDisplays();

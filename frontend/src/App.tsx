@@ -12,6 +12,7 @@ import { TFTreeManager } from '@/ros/tfTree';
 import LoginPage from '@/pages/LoginPage';
 import TopBar from '@/components/TopBar';
 import Layout from '@/components/Layout';
+import TimelineBar from '@/components/TimelineBar';
 import { DataSourceProvider } from '@/data-source/DataSourceProvider';
 
 // Pages → registered as panels
@@ -25,6 +26,8 @@ import RobotListPanel from '@/panels/robots/RobotListPanel';
 import RobotConfigPanel from '@/panels/robots/RobotConfigPanel';
 import RobotIsaacPanel from '@/panels/robots/RobotIsaacPanel';
 import RobotRealPanel from '@/panels/robots/RobotRealPanel';
+import RawMessagesPanel from '@/panels/RawMessages/RawMessagesPanel';
+import PlotPanel from '@/panels/Plot/PlotPanel';
 
 // Register all panels
 registerPanel({ id: 'viewport3d', title: '3D Viewport', category: '3d-spatial', component: Viewport3D, platforms: ['web', 'desktop'] });
@@ -43,6 +46,8 @@ registerPanel({ id: 'robot-list', title: 'Robot List', category: 'ros2-control',
 registerPanel({ id: 'robot-config', title: 'Robot Config', category: 'ros2-control', component: RobotConfigPanel, platforms: ['web', 'desktop'] });
 registerPanel({ id: 'robot-isaac', title: 'Isaac Pipeline', category: 'isaac', component: RobotIsaacPanel, platforms: ['web', 'desktop'] });
 registerPanel({ id: 'robot-real', title: 'Real Robot', category: 'ros2-control', component: RobotRealPanel, platforms: ['web', 'desktop'] });
+registerPanel({ id: 'raw-messages', title: 'Raw Messages', category: 'data', component: RawMessagesPanel, platforms: ['web', 'desktop'] });
+registerPanel({ id: 'plot', title: 'Plot', category: 'data', component: PlotPanel, platforms: ['web', 'desktop'] });
 
 // Register all display types
 initDisplays();
@@ -86,6 +91,7 @@ export default function App() {
         <div className="flex-1 min-w-0 min-h-0">
           <Layout />
         </div>
+        <TimelineBar />
       </div>
     </DataSourceProvider>
   );

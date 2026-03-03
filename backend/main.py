@@ -20,6 +20,9 @@ from core.integrity import run_startup_integrity_check, has_critical_failures
 from db.session import init_engines, dispose_engines, get_registry_engine, get_empirical_engine
 from rosbridge.client import RosBridgeClient
 from api import ros2, isaac, containers, registry, builds, workflows, agents, compute, empirical, pipelines
+from api.components import router as components_router
+from api.packages import router as packages_router
+from api.configurations import router as configurations_router
 
 logger = structlog.get_logger(__name__)
 settings = get_settings()
@@ -107,6 +110,9 @@ app.include_router(agents.router, prefix="/api/agents", tags=["Agents"])
 app.include_router(compute.router, prefix="/api/compute", tags=["Compute"])
 app.include_router(empirical.router, prefix="/api/empirical", tags=["Empirical"])
 app.include_router(pipelines.router, prefix="/api/pipelines", tags=["Pipelines"])
+app.include_router(components_router, prefix="/api/components", tags=["Components"])
+app.include_router(packages_router, prefix="/api/packages", tags=["Packages"])
+app.include_router(configurations_router, prefix="/api/robots", tags=["Configurations"])
 
 
 @app.get("/health")

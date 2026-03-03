@@ -10,7 +10,8 @@ export type PageId =
   | 'agents'
   | 'infrastructure'
   | 'registry'
-  | 'pipelines';
+  | 'pipelines'
+  | 'monitor';
 
 interface NavState {
   activePage: PageId;

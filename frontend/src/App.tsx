@@ -26,6 +26,7 @@ import InfraPage from '@/pages/InfraPage';
 import RegistryPage from '@/pages/RegistryPage';
 import PipelinesPage from '@/pages/PipelinesPage';
 import RobotsPage from '@/pages/RobotsPage';
+import MonitorPage from '@/pages/MonitorPage';
 
 // Register all panels (for the 3D viewer mosaic)
 registerPanel({ id: 'viewport3d', title: '3D Viewport', component: Viewport3D });
@@ -51,6 +52,7 @@ const PAGE_COMPONENTS = {
   infrastructure: InfraPage,
   registry: RegistryPage,
   pipelines: PipelinesPage,
+  monitor: MonitorPage,
 } as const;
 
 export default function App() {

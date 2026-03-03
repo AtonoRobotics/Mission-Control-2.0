@@ -26,6 +26,7 @@ const NAV_SECTIONS: NavSection[] = [
     label: 'Operations',
     items: [
       { id: 'robots', label: 'Robots', icon: '◉' },
+      { id: 'monitor', label: 'Monitor', icon: '◫' },
       { id: 'fleet', label: 'Fleet', icon: '▦' },
       { id: 'agents', label: 'Agents', icon: '⚙' },
       { id: 'infrastructure', label: 'Infra', icon: '▣' },

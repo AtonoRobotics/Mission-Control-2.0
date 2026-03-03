@@ -1,21 +1,33 @@
-import { useState, useEffect } from 'react';
-import { useRobotStore } from '@/stores/robotStore';
-import Viewport3D from '@/panels/Viewport3D/Viewport3D';
-import RQTGraphPanel from '@/panels/RQTGraph/RQTGraphPanel';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import Editor, { loader, type Monaco } from '@monaco-editor/react';
+import * as monaco from 'monaco-editor';
+import { useRobotStore, type RobotFile } from '@/stores/robotStore';
+
+// Use locally installed monaco-editor instead of CDN
+loader.config({ monaco });
+
+// Builder components
+import ComponentTree from '@/components/builder/ComponentTree';
+import ComponentPicker from '@/components/builder/ComponentPicker';
+import PropertiesPanel from '@/components/builder/PropertiesPanel';
+import BuilderPreview3D from '@/components/builder/BuilderPreview3D';
+import MeshUploader from '@/components/builder/MeshUploader';
+import { useComponentStore, type Component } from '@/stores/componentStore';
+import { useBuilderStore, type TreeNode } from '@/stores/builderStore';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-type RobotsTabId = 'list' | 'config' | 'isaac' | 'real';
+type ViewMode = 'configurator' | 'files';
 
-interface Build {
-  id: string;
-  robot_id: string | null;
-  process: string;
-  status: 'pending' | 'running' | 'complete' | 'failed';
-  created_at: string;
-}
+type FileTabType = 'urdf' | 'curobo_yaml' | 'usd';
+
+const FILE_TAB_META: Record<FileTabType, { label: string; language: string }> = {
+  urdf:        { label: 'URDF',   language: 'xml' },
+  curobo_yaml: { label: 'cuRobo', language: 'yaml' },
+  usd:         { label: 'USD',    language: 'python' },
+};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -41,20 +53,6 @@ function statusColor(status: string): string {
   }
 }
 
-function buildStatusBadge(status: string): string {
-  switch (status) {
-    case 'complete': return 'badge badge-success';
-    case 'running': return 'badge badge-warning';
-    case 'pending': return 'badge badge-info';
-    case 'failed': return 'badge badge-danger';
-    default: return 'badge';
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Shared sub-components
-// ---------------------------------------------------------------------------
-
 function Spinner() {
   return (
     <div style={{
@@ -71,44 +69,6 @@ function Spinner() {
   );
 }
 
-function ErrorMessage({ msg }: { msg: string }) {
-  return (
-    <div style={{
-      padding: '12px 16px',
-      background: 'rgba(255, 68, 68, 0.08)',
-      border: '1px solid rgba(255, 68, 68, 0.25)',
-      borderRadius: 'var(--radius-md)',
-      color: 'var(--danger)',
-      fontSize: 12,
-    }}>
-      {msg}
-    </div>
-  );
-}
-
-function EmptyState({ label }: { label: string }) {
-  return (
-    <div style={{
-      padding: '32px 0', textAlign: 'center',
-      color: 'var(--text-muted)', fontSize: 12,
-    }}>
-      {label}
-    </div>
-  );
-}
-
-function SectionHeader({ title, right }: { title: string; right?: React.ReactNode }) {
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      marginBottom: 12,
-    }}>
-      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{title}</span>
-      {right}
-    </div>
-  );
-}
-
 function StatusDot({ status }: { status: string }) {
   return (
     <span style={{
@@ -118,183 +78,24 @@ function StatusDot({ status }: { status: string }) {
   );
 }
 
-function TabBar({
-  tabs, active, onSelect,
-}: {
-  tabs: { id: RobotsTabId; label: string }[];
-  active: RobotsTabId;
-  onSelect: (id: RobotsTabId) => void;
-}) {
-  return (
-    <div style={{
-      display: 'flex', gap: 2, borderBottom: '1px solid var(--border-default)',
-      paddingBottom: 0, marginBottom: 16,
-    }}>
-      {tabs.map((t) => (
-        <button
-          key={t.id}
-          onClick={() => onSelect(t.id)}
-          style={{
-            background: 'none',
-            border: 'none',
-            borderBottom: active === t.id ? '2px solid var(--accent)' : '2px solid transparent',
-            color: active === t.id ? 'var(--accent)' : 'var(--text-secondary)',
-            cursor: 'pointer',
-            fontSize: 12,
-            fontWeight: active === t.id ? 600 : 400,
-            padding: '8px 16px',
-            transition: 'color 0.15s, border-color 0.15s',
-          }}
-        >
-          {t.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 // ---------------------------------------------------------------------------
-// Sub-tab 1: Robot List
+// Left Panel — Robot List (always visible)
 // ---------------------------------------------------------------------------
 
-function RobotListTab({ onNavigate }: { onNavigate: (tab: RobotsTabId) => void }) {
+function RobotListPanel() {
   const { robots, loading, error, selectedRobotId, fetchRobots, selectRobot } = useRobotStore();
 
   useEffect(() => { fetchRobots(); }, [fetchRobots]);
 
-  const handleSelect = (robotId: string) => {
-    selectRobot(robotId);
-    onNavigate('config');
-  };
-
-  return (
-    <div>
-      <SectionHeader
-        title="Robot Assets"
-        right={
-          <button
-            className="btn-primary"
-            style={{ fontSize: 11, padding: '5px 14px' }}
-            onClick={() => { selectRobot(null); onNavigate('config'); }}
-          >
-            + New Robot
-          </button>
-        }
-      />
-
-      {error && <ErrorMessage msg={error} />}
-      {loading && <Spinner />}
-      {!loading && !error && robots.length === 0 && <EmptyState label="No robots registered." />}
-
-      {!loading && robots.length > 0 && (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-          gap: 12,
-        }}>
-          {robots.map((r) => (
-            <div
-              key={r.robot_id}
-              className="panel"
-              onClick={() => handleSelect(r.robot_id)}
-              style={{
-                padding: '14px 16px',
-                cursor: 'pointer',
-                border: selectedRobotId === r.robot_id
-                  ? '1px solid var(--accent)' : '1px solid var(--border-default)',
-                transition: 'border-color 0.15s',
-              }}
-            >
-              {/* Header */}
-              <div style={{
-                display: 'flex', alignItems: 'flex-start',
-                justifyContent: 'space-between', marginBottom: 6,
-              }}>
-                <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>
-                  {r.name}
-                </span>
-                <span className="badge badge-accent" style={{ marginLeft: 8, flexShrink: 0 }}>
-                  {r.model || 'Robot'}
-                </span>
-              </div>
-
-              {/* Manufacturer */}
-              <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 10 }}>
-                {r.manufacturer || 'Unknown manufacturer'}
-              </div>
-
-              {/* Stats */}
-              <div style={{
-                display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6,
-                borderTop: '1px solid var(--border-default)', paddingTop: 10,
-              }}>
-                {[
-                  { label: 'DOF', value: r.dof ?? '—' },
-                  { label: 'Reach', value: r.reach_mm ? `${r.reach_mm}mm` : '—' },
-                  { label: 'Payload', value: r.payload_kg ? `${r.payload_kg}kg` : '—' },
-                ].map(({ label, value }) => (
-                  <div key={label} style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>{label}</div>
-                    <div style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 600 }}>{value}</div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Pipeline badges */}
-              <div style={{
-                display: 'flex', gap: 6, marginTop: 10,
-                borderTop: '1px solid var(--border-default)', paddingTop: 8,
-              }}>
-                <span style={{
-                  fontSize: 9, padding: '2px 8px', borderRadius: 3,
-                  background: 'rgba(255, 170, 0, 0.12)', color: 'var(--accent)',
-                  fontWeight: 600, letterSpacing: 0.5,
-                }}>
-                  ISAAC
-                </span>
-                <span style={{
-                  fontSize: 9, padding: '2px 8px', borderRadius: 3,
-                  background: 'rgba(0, 200, 120, 0.12)', color: 'var(--success)',
-                  fontWeight: 600, letterSpacing: 0.5,
-                }}>
-                  REAL
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Sub-tab 2: Robot Config
-// ---------------------------------------------------------------------------
-
-function RobotConfigTab() {
-  const {
-    selectedRobotId, robots, joints, links, sensors, spheres,
-    specsLoading, selectRobot, fetchRobots,
-  } = useRobotStore();
-
-  const robot = robots.find((r) => r.robot_id === selectedRobotId);
-  const isCreate = !selectedRobotId;
-
-  // Form state for create mode
+  const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({
     robot_id: '', name: '', manufacturer: '', model: '',
-    dof: '', payload_kg: '', reach_mm: '', description: '',
+    dof: '', payload_kg: '', reach_mm: '',
   });
   const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-
-  // Build actions
-  const [buildStatus, setBuildStatus] = useState<string | null>(null);
 
   const handleCreate = async () => {
     setSaving(true);
-    setSaveError(null);
     try {
       const body = {
         robot_id: form.robot_id,
@@ -304,7 +105,6 @@ function RobotConfigTab() {
         dof: form.dof ? parseInt(form.dof) : null,
         payload_kg: form.payload_kg ? parseFloat(form.payload_kg) : null,
         reach_mm: form.reach_mm ? parseFloat(form.reach_mm) : null,
-        description: form.description || null,
       };
       const res = await fetch('/mc/api/registry/robots', {
         method: 'POST',
@@ -315,597 +115,834 @@ function RobotConfigTab() {
       await fetchRobots();
       const created = await res.json();
       selectRobot(created.robot_id);
-    } catch (e) {
-      setSaveError(e instanceof Error ? e.message : 'Failed to save');
+      setShowCreate(false);
+      setForm({ robot_id: '', name: '', manufacturer: '', model: '', dof: '', payload_kg: '', reach_mm: '' });
+    } catch {
+      // silently fail
     } finally {
       setSaving(false);
     }
   };
 
-  const triggerBuild = async (process: string) => {
-    if (!selectedRobotId) return;
-    setBuildStatus(`Starting ${process}…`);
-    try {
-      const res = await fetch('/mc/api/builds', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ robot_id: selectedRobotId, process }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setBuildStatus(`${process} build created`);
-    } catch (e) {
-      setBuildStatus(`Error: ${e instanceof Error ? e.message : 'Build failed'}`);
-    }
-  };
+  return (
+    <div style={{
+      width: 240, flexShrink: 0, display: 'flex', flexDirection: 'column',
+      background: 'var(--bg-primary, #0a0a0a)',
+      borderRight: '1px solid var(--border-default)',
+      overflow: 'hidden',
+    }}>
+      {/* Header */}
+      <div style={{
+        padding: '10px 12px',
+        borderBottom: '1px solid var(--border-default)',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      }}>
+        <span style={{
+          fontSize: 10, fontWeight: 600, color: 'var(--text-muted)',
+          textTransform: 'uppercase', letterSpacing: '0.05em',
+        }}>
+          Robots
+        </span>
+        <button
+          onClick={() => setShowCreate(!showCreate)}
+          style={{
+            background: 'none', border: 'none', color: 'var(--accent, #ffaa00)',
+            cursor: 'pointer', fontSize: 14, padding: '0 4px', lineHeight: 1,
+          }}
+        >
+          +
+        </button>
+      </div>
 
-  if (isCreate) {
-    return (
-      <div>
-        <SectionHeader title="Register New Robot" />
-        <div className="panel" style={{ padding: 16, maxWidth: 520 }}>
-          {saveError && <ErrorMessage msg={saveError} />}
-          <div style={{ display: 'grid', gap: 12, marginTop: saveError ? 12 : 0 }}>
-            {[
-              { key: 'robot_id', label: 'Robot ID', placeholder: 'e.g. dobot_cr10' },
-              { key: 'name', label: 'Name', placeholder: 'e.g. Dobot CR10' },
-              { key: 'manufacturer', label: 'Manufacturer', placeholder: 'e.g. Dobot' },
-              { key: 'model', label: 'Model', placeholder: 'e.g. CR10' },
-              { key: 'dof', label: 'DOF', placeholder: '6' },
-              { key: 'payload_kg', label: 'Payload (kg)', placeholder: '10' },
-              { key: 'reach_mm', label: 'Reach (mm)', placeholder: '1525' },
-            ].map(({ key, label, placeholder }) => (
-              <div key={key}>
-                <label style={{ fontSize: 10, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
-                  {label}
-                </label>
-                <input
-                  className="input"
-                  style={{ width: '100%' }}
-                  value={form[key as keyof typeof form]}
-                  placeholder={placeholder}
-                  onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
-                />
-              </div>
-            ))}
-            <div>
-              <label style={{ fontSize: 10, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
-                Description
-              </label>
-              <textarea
-                className="input"
-                style={{ width: '100%', minHeight: 60, resize: 'vertical' }}
-                value={form.description}
-                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-              />
-            </div>
-            <button
-              className="btn-primary"
-              onClick={handleCreate}
-              disabled={saving || !form.robot_id || !form.name}
-              style={{ justifySelf: 'start', padding: '6px 20px', fontSize: 12 }}
-            >
-              {saving ? 'Saving…' : 'Register Robot'}
-            </button>
-          </div>
+      {/* Create form (inline) */}
+      {showCreate && (
+        <div style={{
+          padding: '8px 10px', borderBottom: '1px solid var(--border-default)',
+          display: 'flex', flexDirection: 'column', gap: 6,
+        }}>
+          {[
+            { key: 'robot_id', placeholder: 'robot_id (e.g. dobot_cr10)' },
+            { key: 'name', placeholder: 'Name' },
+            { key: 'manufacturer', placeholder: 'Manufacturer' },
+          ].map(({ key, placeholder }) => (
+            <input
+              key={key}
+              value={form[key as keyof typeof form]}
+              placeholder={placeholder}
+              onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+              style={{
+                background: 'var(--bg-surface, #1a1a1a)',
+                border: '1px solid var(--border-default)',
+                borderRadius: 3, color: 'var(--text-primary)',
+                fontSize: 10, padding: '4px 8px', outline: 'none',
+              }}
+            />
+          ))}
+          <button
+            onClick={handleCreate}
+            disabled={saving || !form.robot_id || !form.name}
+            style={{
+              background: 'var(--accent, #ffaa00)', border: 'none', color: '#000',
+              padding: '4px 0', borderRadius: 3, fontSize: 10, cursor: 'pointer',
+              fontWeight: 600, opacity: saving || !form.robot_id || !form.name ? 0.4 : 1,
+            }}
+          >
+            {saving ? 'Creating…' : 'Create'}
+          </button>
         </div>
+      )}
+
+      {/* Robot list */}
+      <div style={{ flex: 1, overflowY: 'auto' }}>
+        {error && (
+          <div style={{ padding: '8px 10px', fontSize: 10, color: 'var(--danger)' }}>{error}</div>
+        )}
+        {loading && <Spinner />}
+        {!loading && robots.length === 0 && (
+          <div style={{ padding: '24px 10px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 11 }}>
+            No robots registered
+          </div>
+        )}
+        {robots.map((r) => (
+          <button
+            key={r.robot_id}
+            onClick={() => selectRobot(r.robot_id)}
+            style={{
+              display: 'block', width: '100%', textAlign: 'left',
+              padding: '10px 12px',
+              background: selectedRobotId === r.robot_id ? 'rgba(255, 170, 0, 0.06)' : 'transparent',
+              borderLeft: selectedRobotId === r.robot_id
+                ? '2px solid var(--accent, #ffaa00)' : '2px solid transparent',
+              borderBottom: '1px solid var(--border-default)',
+              border: 'none',
+              borderLeftStyle: 'solid',
+              borderLeftWidth: 2,
+              borderLeftColor: selectedRobotId === r.robot_id ? 'var(--accent, #ffaa00)' : 'transparent',
+              borderBottomWidth: 1,
+              borderBottomStyle: 'solid',
+              borderBottomColor: 'var(--border-default)',
+              cursor: 'pointer',
+              transition: 'background 0.15s',
+            }}
+          >
+            <div style={{
+              fontSize: 12, fontWeight: 600,
+              color: selectedRobotId === r.robot_id ? 'var(--accent, #ffaa00)' : 'var(--text-primary)',
+            }}>
+              {r.name}
+            </div>
+            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
+              {r.manufacturer || r.model || r.robot_id}
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+              {r.dof && (
+                <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>{r.dof} DOF</span>
+              )}
+              {r.payload_kg && (
+                <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>{r.payload_kg}kg</span>
+              )}
+              {r.reach_mm && (
+                <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>{r.reach_mm}mm</span>
+              )}
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Configurator View — component tree + 3D preview + properties + build bar
+// ---------------------------------------------------------------------------
+
+function ConfiguratorView() {
+  const { selectedRobotId, robots } = useRobotStore();
+  const robot = robots.find((r) => r.robot_id === selectedRobotId);
+  const { components, fetchComponents, approveComponent, rejectComponent } = useComponentStore();
+  const {
+    configurations, selectedConfigId, building, buildResult,
+    fetchConfigurations, createConfiguration, selectConfiguration, buildConfiguration,
+    fetchPackages,
+  } = useBuilderStore();
+
+  const [tree, setTree] = useState<TreeNode[]>([]);
+  const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerAttachPoint, setPickerAttachPoint] = useState<string>('');
+  const [meshUploadOpen, setMeshUploadOpen] = useState(false);
+  const [meshUploadComponentId, setMeshUploadComponentId] = useState<string>('');
+  const [propsCollapsed, setPropsCollapsed] = useState(false);
+
+  useEffect(() => {
+    fetchComponents();
+    fetchPackages();
+    if (selectedRobotId) {
+      fetchConfigurations(selectedRobotId);
+    }
+  }, [selectedRobotId, fetchComponents, fetchPackages, fetchConfigurations]);
+
+  if (!selectedRobotId || !robot) {
+    return (
+      <div style={{
+        flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        color: 'var(--text-muted)', fontSize: 13,
+      }}>
+        Select a robot from the list to configure
       </div>
     );
   }
 
-  // Edit / view mode
-  return (
-    <div>
-      {!robot && <EmptyState label="Select a robot from the Robot List tab." />}
-      {robot && (
-        <>
-          {/* Robot identity */}
-          <SectionHeader title={robot.name} right={
-            <span className="mono" style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-              {robot.robot_id}
-            </span>
-          } />
+  const handleAddAt = (attachPoint: string) => {
+    setPickerAttachPoint(attachPoint);
+    setPickerOpen(true);
+  };
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
-            {/* Info card */}
-            <div className="panel" style={{ padding: 16 }}>
-              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 8, fontWeight: 600 }}>
-                ROBOT INFO
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 12 }}>
-                {[
-                  ['Manufacturer', robot.manufacturer],
-                  ['Model', robot.model],
-                  ['DOF', robot.dof],
-                  ['Payload', robot.payload_kg ? `${robot.payload_kg} kg` : null],
-                  ['Reach', robot.reach_mm ? `${robot.reach_mm} mm` : null],
-                  ['Created', fmtDate(robot.created_at)],
-                ].map(([label, value]) => (
-                  <div key={label as string}>
-                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>{label}</div>
-                    <div style={{ color: value ? 'var(--text-primary)' : 'var(--text-muted)' }}>
-                      {value ?? '—'}
-                    </div>
-                  </div>
-                ))}
-              </div>
-              {robot.description && (
-                <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                  {robot.description}
-                </div>
-              )}
-            </div>
+  const handlePickComponent = (comp: Component) => {
+    const node: TreeNode = {
+      component_id: comp.component_id,
+      attach_to: pickerAttachPoint || 'ee_flange',
+      joint_config: { type: 'fixed' },
+    };
+    setTree((prev) => [...prev, node]);
+  };
 
-            {/* Build actions */}
-            <div className="panel" style={{ padding: 16 }}>
-              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 12, fontWeight: 600 }}>
-                BUILD ACTIONS
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {[
-                  { label: 'Build URDF', process: 'urdf_build' },
-                  { label: 'Convert to USD', process: 'usd_conversion' },
-                  { label: 'Generate cuRobo Config', process: 'curobo_config' },
-                  { label: 'Generate Launch Files', process: 'launch_gen' },
-                ].map(({ label, process }) => (
-                  <button
-                    key={process}
-                    className="btn-secondary"
-                    style={{ fontSize: 11, padding: '6px 14px', textAlign: 'left' }}
-                    onClick={() => triggerBuild(process)}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              {buildStatus && (
-                <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-secondary)' }}>
-                  {buildStatus}
-                </div>
-              )}
-            </div>
-          </div>
+  const handleRemoveComponent = (componentId: string) => {
+    setTree((prev) => prev.filter((n) => n.component_id !== componentId));
+    if (selectedComponentId === componentId) setSelectedComponentId(null);
+  };
 
-          {/* Specs tables */}
-          {specsLoading && <Spinner />}
+  const handleApprove = async (id: string) => { await approveComponent(id, 'operator'); };
+  const handleReject = async (id: string) => { await rejectComponent(id, 'operator'); };
 
-          {!specsLoading && joints.length > 0 && (
-            <div style={{ marginBottom: 20 }}>
-              <SectionHeader title="Joint Specs" right={
-                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{joints.length} joints</span>
-              } />
-              <div className="panel" style={{ overflow: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid var(--border-default)' }}>
-                      {['Joint', 'Type', 'Parent → Child', 'Lower', 'Upper', 'Vel Limit', 'Effort'].map((h) => (
-                        <th key={h} style={{
-                          padding: '7px 10px', textAlign: 'left',
-                          color: 'var(--text-muted)', fontWeight: 500, fontSize: 10,
-                          whiteSpace: 'nowrap',
-                        }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {joints.map((j) => (
-                      <tr key={j.joint_name} style={{ borderBottom: '1px solid var(--border-default)' }}>
-                        <td style={{ padding: '6px 10px', color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>
-                          {j.joint_name}
-                        </td>
-                        <td style={{ padding: '6px 10px', color: 'var(--text-secondary)' }}>
-                          {j.joint_type ?? '—'}
-                        </td>
-                        <td style={{ padding: '6px 10px', color: 'var(--text-secondary)' }}>
-                          {j.parent_link ?? '?'} → {j.child_link ?? '?'}
-                        </td>
-                        <td style={{ padding: '6px 10px', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
-                          {j.lower_limit != null ? j.lower_limit.toFixed(4) : <NullBadge />}
-                        </td>
-                        <td style={{ padding: '6px 10px', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
-                          {j.upper_limit != null ? j.upper_limit.toFixed(4) : <NullBadge />}
-                        </td>
-                        <td style={{ padding: '6px 10px', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
-                          {j.velocity_limit != null ? j.velocity_limit.toFixed(4) : <NullBadge />}
-                        </td>
-                        <td style={{ padding: '6px 10px', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
-                          {j.effort_limit != null ? j.effort_limit.toFixed(1) : <NullBadge />}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
+  const handleBuild = async () => {
+    if (!selectedConfigId) return;
+    await buildConfiguration(selectedConfigId);
+  };
 
-          {!specsLoading && links.length > 0 && (
-            <div style={{ marginBottom: 20 }}>
-              <SectionHeader title="Link Specs" right={
-                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{links.length} links</span>
-              } />
-              <div className="panel" style={{ overflow: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid var(--border-default)' }}>
-                      {['Link', 'Mass (kg)', 'Ixx', 'Iyy', 'Izz', 'Visual Mesh'].map((h) => (
-                        <th key={h} style={{
-                          padding: '7px 10px', textAlign: 'left',
-                          color: 'var(--text-muted)', fontWeight: 500, fontSize: 10,
-                          whiteSpace: 'nowrap',
-                        }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {links.map((l) => (
-                      <tr key={l.link_name} style={{ borderBottom: '1px solid var(--border-default)' }}>
-                        <td style={{ padding: '6px 10px', color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>
-                          {l.link_name}
-                        </td>
-                        <td style={{ padding: '6px 10px', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
-                          {l.mass != null ? l.mass.toFixed(3) : <NullBadge />}
-                        </td>
-                        <td style={{ padding: '6px 10px', fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
-                          {l.inertia_ixx != null ? l.inertia_ixx.toExponential(2) : <NullBadge />}
-                        </td>
-                        <td style={{ padding: '6px 10px', fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
-                          {l.inertia_iyy != null ? l.inertia_iyy.toExponential(2) : <NullBadge />}
-                        </td>
-                        <td style={{ padding: '6px 10px', fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
-                          {l.inertia_izz != null ? l.inertia_izz.toExponential(2) : <NullBadge />}
-                        </td>
-                        <td style={{
-                          padding: '6px 10px', fontFamily: 'var(--font-mono)', fontSize: 10,
-                          color: 'var(--text-muted)', maxWidth: 200, overflow: 'hidden',
-                          textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                        }}>
-                          {l.visual_mesh ?? '—'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
+  const handleCreateConfig = async () => {
+    const name = prompt('Configuration name:');
+    if (!name) return;
+    await createConfiguration(selectedRobotId, { name, base_type: 'standing' } as any);
+  };
 
-          {!specsLoading && sensors.length > 0 && (
-            <div style={{ marginBottom: 20 }}>
-              <SectionHeader title="Sensors" right={
-                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{sensors.length} sensors</span>
-              } />
-              <div className="panel" style={{ overflow: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid var(--border-default)' }}>
-                      {['Sensor ID', 'Type', 'Model', 'Mount Link'].map((h) => (
-                        <th key={h} style={{
-                          padding: '7px 10px', textAlign: 'left',
-                          color: 'var(--text-muted)', fontWeight: 500, fontSize: 10,
-                        }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sensors.map((s) => (
-                      <tr key={s.sensor_id} style={{ borderBottom: '1px solid var(--border-default)' }}>
-                        <td style={{ padding: '6px 10px', color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>
-                          {s.sensor_id}
-                        </td>
-                        <td style={{ padding: '6px 10px', color: 'var(--text-secondary)' }}>{s.sensor_type ?? '—'}</td>
-                        <td style={{ padding: '6px 10px', color: 'var(--text-primary)' }}>{s.model ?? '—'}</td>
-                        <td style={{ padding: '6px 10px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>
-                          {s.mount_link ?? '—'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
+  const totalMass = tree.reduce((sum, node) => {
+    const comp = components.find((c) => c.component_id === node.component_id);
+    return sum + (comp?.physics?.mass_kg ?? 0);
+  }, 0);
 
-          {!specsLoading && spheres.length > 0 && (
-            <div>
-              <SectionHeader title="Collision Spheres" right={
-                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{spheres.length} spheres</span>
-              } />
-              <div className="panel" style={{ padding: 14 }}>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {/* Group by link */}
-                  {Object.entries(
-                    spheres.reduce<Record<string, number>>((acc, s) => {
-                      acc[s.link_name] = (acc[s.link_name] || 0) + 1;
-                      return acc;
-                    }, {})
-                  ).map(([link, count]) => (
-                    <span key={link} style={{
-                      fontSize: 10, padding: '3px 10px', borderRadius: 3,
-                      background: 'var(--bg-surface-2)', color: 'var(--text-secondary)',
-                      fontFamily: 'var(--font-mono)',
-                    }}>
-                      {link}: {count}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
-
-function NullBadge() {
-  return (
-    <span style={{
-      fontSize: 9, padding: '1px 6px', borderRadius: 3,
-      background: 'rgba(255, 68, 68, 0.1)', color: 'var(--danger)',
-      fontWeight: 600, letterSpacing: 0.3,
-    }}>
-      NULL
-    </span>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Sub-tab 3: Isaac Pipeline
-// ---------------------------------------------------------------------------
-
-function IsaacPipelineTab() {
-  const { selectedRobotId, robots } = useRobotStore();
-  const robot = robots.find((r) => r.robot_id === selectedRobotId);
-
-  // Build history for this robot
-  const [builds, setBuilds] = useState<Build[]>([]);
-  const [buildsLoading, setBuildsLoading] = useState(false);
-
-  useEffect(() => {
-    if (!selectedRobotId) return;
-    setBuildsLoading(true);
-    fetch(`/mc/api/builds?robot_id=${selectedRobotId}&limit=10`)
-      .then((r) => r.ok ? r.json() : { builds: [] })
-      .then((data) => setBuilds(data.builds ?? []))
-      .finally(() => setBuildsLoading(false));
-  }, [selectedRobotId]);
-
-  if (!robot) {
-    return <EmptyState label="Select a robot from the Robot List tab to view its Isaac pipeline." />;
-  }
+  const maxPayload = robot.payload_kg ?? 0;
+  const overWeight = maxPayload > 0 && totalMass > maxPayload;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, height: '100%' }}>
-      {/* Top section: Sim Config + Training Runs */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        {/* Sim Config */}
-        <div className="panel" style={{ padding: 16 }}>
-          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 10, fontWeight: 600 }}>
-            SIMULATION CONFIG
-          </div>
-          <div style={{ display: 'grid', gap: 8, fontSize: 12 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>Robot:</span>
-              <span style={{ color: 'var(--accent)', fontWeight: 600 }}>{robot.name}</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>Isaac Sim:</span>
-              <StatusDot status="disconnected" />
-              <span style={{ color: 'var(--text-secondary)', fontSize: 11 }}>Not running</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>Isaac ROS:</span>
-              <StatusDot status="disconnected" />
-              <span style={{ color: 'var(--text-secondary)', fontSize: 11 }}>Not running</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Training Runs */}
-        <div className="panel" style={{ padding: 16 }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            marginBottom: 10,
-          }}>
-            <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600 }}>
-              BUILD HISTORY
-            </span>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      {/* Main area: Component Tree + 3D Preview */}
+      <div style={{ flex: 1, display: 'flex', gap: 1, minHeight: 0, overflow: 'hidden' }}>
+        {/* Component Tree (280px) */}
+        <div style={{
+          width: 280, flexShrink: 0,
+          background: 'var(--bg-primary, #0a0a0a)',
+          borderRight: '1px solid var(--border-default)',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+        }}>
+          <ComponentTree
+            tree={tree}
+            selectedId={selectedComponentId}
+            onSelect={setSelectedComponentId}
+            onAddAt={handleAddAt}
+            onRemove={handleRemoveComponent}
+          />
+          {/* Add root button */}
+          <div style={{ padding: '8px 10px', borderTop: '1px solid var(--border-default)' }}>
             <button
-              className="btn-secondary"
-              style={{ fontSize: 10, padding: '3px 10px' }}
-              onClick={() => {
-                fetch('/mc/api/builds', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ robot_id: selectedRobotId, process: 'isaac_training' }),
-                });
+              onClick={() => handleAddAt('ee_flange')}
+              style={{
+                width: '100%', padding: '6px 0',
+                background: 'rgba(255, 170, 0, 0.08)',
+                border: '1px dashed var(--accent, #ffaa00)',
+                borderRadius: 4, color: 'var(--accent, #ffaa00)',
+                fontSize: 11, cursor: 'pointer',
               }}
             >
-              + New Run
+              + Add Component
             </button>
           </div>
-          {buildsLoading && <Spinner />}
-          {!buildsLoading && builds.length === 0 && (
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', padding: '8px 0' }}>
-              No builds yet.
-            </div>
-          )}
-          {builds.map((b) => (
-            <div key={b.id} style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '5px 0',
-              borderBottom: '1px solid var(--border-default)',
-              fontSize: 11,
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span className={buildStatusBadge(b.status)}>{b.status}</span>
-                <span style={{ color: 'var(--text-secondary)' }}>{b.process}</span>
-              </div>
-              <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>{fmtDate(b.created_at)}</span>
-            </div>
-          ))}
+        </div>
+
+        {/* 3D Preview (flex) */}
+        <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+          <BuilderPreview3D tree={tree} selectedId={selectedComponentId} />
         </div>
       </div>
 
-      {/* Bottom section: Viewport + ROS Graph side by side */}
+      {/* Properties Panel (collapsible, bottom) */}
       <div style={{
-        display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16,
-        flex: 1, minHeight: 350,
+        borderTop: '1px solid var(--border-default)',
+        background: 'var(--bg-primary, #0a0a0a)',
+        overflow: 'hidden',
+        transition: 'height 0.2s ease',
+        height: propsCollapsed ? 28 : 200,
+        flexShrink: 0,
       }}>
-        <div className="panel" style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          <div style={{
-            padding: '8px 12px', fontSize: 10, fontWeight: 600,
-            color: 'var(--text-muted)', borderBottom: '1px solid var(--border-default)',
+        {/* Collapse toggle */}
+        <button
+          onClick={() => setPropsCollapsed(!propsCollapsed)}
+          style={{
+            width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '4px 12px', background: 'none', border: 'none',
+            borderBottom: propsCollapsed ? 'none' : '1px solid var(--border-default)',
+            cursor: 'pointer',
+          }}
+        >
+          <span style={{
+            fontSize: 10, fontWeight: 600, color: 'var(--text-muted)',
+            textTransform: 'uppercase', letterSpacing: '0.05em',
           }}>
-            3D VIEWPORT — Isaac Sim
+            Properties
+          </span>
+          <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+            {propsCollapsed ? '▲' : '▼'}
+          </span>
+        </button>
+        {!propsCollapsed && (
+          <div style={{ height: 'calc(100% - 28px)', overflow: 'auto' }}>
+            <PropertiesPanel
+              componentId={selectedComponentId}
+              onApprove={handleApprove}
+              onReject={handleReject}
+            />
           </div>
-          <div style={{ flex: 1, position: 'relative' }}>
-            <Viewport3D />
-          </div>
+        )}
+      </div>
+
+      {/* Bottom Bar: Build + payload summary */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '8px 12px',
+        borderTop: '1px solid var(--border-default)',
+        background: 'var(--bg-surface-1, #111)',
+        flexShrink: 0,
+      }}>
+        {/* Left: payload summary */}
+        <div style={{ display: 'flex', gap: 16, fontSize: 11, color: 'var(--text-secondary)', alignItems: 'center' }}>
+          <span>Components: <strong style={{ color: 'var(--text-primary)' }}>{tree.length}</strong></span>
+          <span>
+            Payload:{' '}
+            <strong style={{ color: overWeight ? 'var(--danger, #f44)' : 'var(--text-primary)' }}>
+              {totalMass.toFixed(2)} kg
+            </strong>
+            {maxPayload > 0 && (
+              <span style={{ color: 'var(--text-muted)' }}> / {maxPayload} kg</span>
+            )}
+          </span>
+          {/* Payload progress bar */}
+          {maxPayload > 0 && (
+            <div style={{
+              width: 80, height: 4, borderRadius: 2,
+              background: 'var(--bg-surface-3, #2a2a2a)',
+              overflow: 'hidden',
+            }}>
+              <div style={{
+                height: '100%',
+                width: `${Math.min(100, (totalMass / maxPayload) * 100)}%`,
+                background: overWeight ? 'var(--danger, #f44)' : 'var(--accent, #ffaa00)',
+                borderRadius: 2,
+                transition: 'width 0.2s',
+              }} />
+            </div>
+          )}
+          {configurations.length > 0 && (
+            <span>
+              Config: <strong style={{ color: 'var(--accent, #ffaa00)' }}>
+                {configurations.find((c) => c.config_id === selectedConfigId)?.name ?? 'none'}
+              </strong>
+            </span>
+          )}
         </div>
-        <div className="panel" style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          <div style={{
-            padding: '8px 12px', fontSize: 10, fontWeight: 600,
-            color: 'var(--text-muted)', borderBottom: '1px solid var(--border-default)',
-          }}>
-            ROS GRAPH — Isaac Sim Topics
-          </div>
-          <div style={{ flex: 1, position: 'relative' }}>
-            <RQTGraphPanel />
-          </div>
+
+        {/* Right: actions */}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={handleCreateConfig}
+            style={{
+              background: 'var(--bg-surface, #1a1a1a)',
+              border: '1px solid var(--border-default)',
+              color: 'var(--text-secondary)',
+              padding: '5px 12px', borderRadius: 4, fontSize: 10, cursor: 'pointer',
+            }}
+          >
+            New Config
+          </button>
+          <button
+            onClick={handleBuild}
+            disabled={!selectedConfigId || building}
+            style={{
+              background: !selectedConfigId || building ? 'var(--bg-surface, #1a1a1a)' : 'var(--accent, #ffaa00)',
+              border: 'none',
+              color: !selectedConfigId || building ? 'var(--text-muted)' : '#000',
+              padding: '5px 16px', borderRadius: 4, fontSize: 10, cursor: 'pointer',
+              fontWeight: 600,
+              opacity: !selectedConfigId || building ? 0.5 : 1,
+            }}
+          >
+            {building ? 'Building...' : 'Build All Configs'}
+          </button>
         </div>
       </div>
+
+      {/* Build result banner */}
+      {buildResult && (
+        <div style={{
+          padding: '6px 12px',
+          background: buildResult.status === 'built'
+            ? 'rgba(76, 175, 80, 0.08)' : 'rgba(255, 68, 68, 0.08)',
+          border: `1px solid ${buildResult.status === 'built'
+            ? 'rgba(76, 175, 80, 0.25)' : 'rgba(255, 68, 68, 0.25)'}`,
+          fontSize: 10,
+          color: buildResult.status === 'built' ? 'var(--success, #4caf50)' : 'var(--danger, #f44)',
+          flexShrink: 0,
+        }}>
+          {buildResult.status === 'built' ? (
+            <span>Build complete. Files: {Object.keys(buildResult.generated_files).join(', ') || 'pending'}</span>
+          ) : (
+            <div>
+              <strong>Build failed: </strong>
+              {buildResult.errors.join('; ')}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Modals */}
+      <ComponentPicker
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onSelect={handlePickComponent}
+      />
+      <MeshUploader
+        open={meshUploadOpen}
+        onClose={() => setMeshUploadOpen(false)}
+        componentId={meshUploadComponentId}
+        onUploadComplete={() => fetchComponents()}
+      />
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Sub-tab 4: Real Robot
+// Files View — Monaco editor for URDF/cuRobo/USD
 // ---------------------------------------------------------------------------
 
-function RealRobotTab() {
-  const { selectedRobotId, robots, joints } = useRobotStore();
+function defineAmberTheme(monacoInstance: Monaco) {
+  monacoInstance.editor.defineTheme('mc-amber', {
+    base: 'vs-dark',
+    inherit: true,
+    rules: [
+      { token: 'comment', foreground: '6b6b6b', fontStyle: 'italic' },
+      { token: 'keyword', foreground: 'ffaa00' },
+      { token: 'string', foreground: 'c8a050' },
+      { token: 'number', foreground: 'e8b060' },
+      { token: 'tag', foreground: 'ffaa00' },
+      { token: 'attribute.name', foreground: 'c89040' },
+      { token: 'attribute.value', foreground: 'c8a050' },
+      { token: 'delimiter', foreground: '888888' },
+      { token: 'type', foreground: 'e8b060' },
+    ],
+    colors: {
+      'editor.background': '#0a0a0a',
+      'editor.foreground': '#d4d4d4',
+      'editor.lineHighlightBackground': '#1a1a1a',
+      'editor.selectionBackground': '#ffaa0030',
+      'editorCursor.foreground': '#ffaa00',
+      'editorLineNumber.foreground': '#444444',
+      'editorLineNumber.activeForeground': '#ffaa00',
+      'editorIndentGuide.background': '#1a1a1a',
+      'editor.selectionHighlightBackground': '#ffaa0018',
+      'editorWidget.background': '#111111',
+      'editorWidget.border': '#2a2a2a',
+      'input.background': '#111111',
+      'input.border': '#2a2a2a',
+      'input.foreground': '#d4d4d4',
+    },
+  });
+}
+
+function FilesView() {
+  const {
+    selectedRobotId, robots, robotFiles, robotFilesLoading,
+    fileHistory, fileHistoryLoading,
+    fetchRobotFiles, fetchFileHistory, restoreFileVersion,
+  } = useRobotStore();
+
   const robot = robots.find((r) => r.robot_id === selectedRobotId);
 
-  // Simulated joint state (would come from roslib subscription in production)
-  const [jointStates, setJointStates] = useState<Record<string, number>>({});
+  const [activeFileType, setActiveFileType] = useState<FileTabType>('urdf');
+  const [editing, setEditing] = useState(false);
+  const [editorContent, setEditorContent] = useState<string>('');
+  const [savedContent, setSavedContent] = useState<string>('');
+  const [contentLoading, setContentLoading] = useState(false);
+  const [savingContent, setSavingContent] = useState(false);
+  const [saveMsg, setSaveMsg] = useState<string | null>(null);
+  const activeFileRef = useRef<RobotFile | null>(null);
 
-  if (!robot) {
-    return <EmptyState label="Select a robot from the Robot List tab to view real robot status." />;
+  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
+  const [viewingOldVersion, setViewingOldVersion] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+
+  const isDirty = editorContent !== savedContent;
+  const activeFile = robotFiles.find((f) => f.file_type === activeFileType) || null;
+  activeFileRef.current = activeFile;
+
+  const loadFileContent = useCallback(async (file: RobotFile | null) => {
+    if (!file) {
+      setEditorContent('');
+      setSavedContent('');
+      return;
+    }
+    setContentLoading(true);
+    setSaveMsg(null);
+    try {
+      const res = await fetch(`/mc/api/registry/files/${file.file_id}/content`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const content = data.content || '';
+      setEditorContent(content);
+      setSavedContent(content);
+    } catch {
+      setEditorContent('// Failed to load file content');
+      setSavedContent('');
+    } finally {
+      setContentLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadFileContent(activeFile);
+    setSelectedVersionId(null);
+    setViewingOldVersion(false);
+    if (activeFile) fetchFileHistory(activeFile.file_id);
+  }, [activeFile?.file_id, loadFileContent, fetchFileHistory]);
+
+  const handleSave = async () => {
+    const file = activeFileRef.current;
+    if (!file || !isDirty || !selectedRobotId) return;
+    setSavingContent(true);
+    setSaveMsg(null);
+    try {
+      const res = await fetch(`/mc/api/registry/files/${file.file_id}/content`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: editorContent }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setSavedContent(editorContent);
+      setSaveMsg('Saved');
+      setEditing(false);
+      setTimeout(() => setSaveMsg(null), 2000);
+      await fetchRobotFiles(selectedRobotId);
+    } catch (e) {
+      setSaveMsg(`Error: ${e instanceof Error ? e.message : 'Save failed'}`);
+    } finally {
+      setSavingContent(false);
+    }
+  };
+
+  const handleRestore = async () => {
+    if (!selectedVersionId || !selectedRobotId) return;
+    setRestoring(true);
+    const result = await restoreFileVersion(selectedVersionId);
+    if (result) {
+      setSaveMsg('Version restored');
+      setTimeout(() => setSaveMsg(null), 2000);
+      setSelectedVersionId(null);
+      setViewingOldVersion(false);
+      await fetchRobotFiles(selectedRobotId);
+    } else {
+      setSaveMsg('Error: Restore failed');
+    }
+    setRestoring(false);
+  };
+
+  const handleVersionSelect = async (fileId: string | null) => {
+    if (!fileId || fileId === activeFile?.file_id) {
+      setSelectedVersionId(null);
+      setViewingOldVersion(false);
+      if (activeFile) loadFileContent(activeFile);
+      return;
+    }
+    setSelectedVersionId(fileId);
+    setViewingOldVersion(true);
+    setEditing(false);
+    setContentLoading(true);
+    try {
+      const res = await fetch(`/mc/api/registry/files/${fileId}/content`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setEditorContent(data.content || '');
+    } catch {
+      setEditorContent('// Failed to load version content');
+    } finally {
+      setContentLoading(false);
+    }
+  };
+
+  const [generating, setGenerating] = useState(false);
+  const handleGenerate = async () => {
+    if (!selectedRobotId) return;
+    setGenerating(true);
+    try {
+      const res = await fetch(`/mc/api/registry/robots/${selectedRobotId}/generate-files`, {
+        method: 'POST',
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await fetchRobotFiles(selectedRobotId);
+    } catch {
+      // silently fail
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  if (!selectedRobotId || !robot) {
+    return (
+      <div style={{
+        flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        color: 'var(--text-muted)', fontSize: 13,
+      }}>
+        Select a robot to view config files
+      </div>
+    );
   }
 
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, height: '100%' }}>
-      {/* Top section: Connection + Joint States */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 16 }}>
-        {/* Connection status */}
-        <div className="panel" style={{ padding: 16 }}>
-          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 10, fontWeight: 600 }}>
-            CONNECTION
-          </div>
-          <div style={{ display: 'grid', gap: 8, fontSize: 12 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>Robot:</span>
-              <span style={{ color: 'var(--accent)', fontWeight: 600 }}>{robot.name}</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <StatusDot status="disconnected" />
-              <span style={{ color: 'var(--text-secondary)', fontSize: 11 }}>rosbridge:9090</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <StatusDot status="disconnected" />
-              <span style={{ color: 'var(--text-secondary)', fontSize: 11 }}>Robot driver</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <StatusDot status="disconnected" />
-              <span style={{ color: 'var(--text-secondary)', fontSize: 11 }}>Safety enforcer</span>
-            </div>
-          </div>
+  // No files yet
+  if (!robotFilesLoading && robotFiles.length === 0) {
+    return (
+      <div style={{
+        flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        flexDirection: 'column', gap: 12,
+      }}>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+          No config files generated yet for {robot.name}
         </div>
+        <button
+          className="btn-primary"
+          onClick={handleGenerate}
+          disabled={generating}
+          style={{ padding: '6px 20px', fontSize: 11 }}
+        >
+          {generating ? 'Generating…' : 'Generate Config Files'}
+        </button>
+      </div>
+    );
+  }
 
-        {/* Joint States */}
-        <div className="panel" style={{ padding: 16 }}>
-          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 10, fontWeight: 600 }}>
-            JOINT STATES
-          </div>
-          {joints.length === 0 ? (
-            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-              No joint data. Load robot specs in Config tab.
-            </div>
+  if (robotFilesLoading) {
+    return <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spinner /></div>;
+  }
+
+  const fileMeta = FILE_TAB_META[activeFileType];
+
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      {/* Top bar: robot info + edit controls */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '6px 12px', flexShrink: 0,
+        borderBottom: '1px solid var(--border-default)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+            {robot.name}
+          </span>
+          <span className="mono" style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+            {robot.robot_id}
+          </span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {saveMsg && (
+            <span style={{
+              fontSize: 10,
+              color: saveMsg.startsWith('Error') ? 'var(--danger)' : 'var(--success)',
+            }}>
+              {saveMsg}
+            </span>
+          )}
+          {viewingOldVersion ? (
+            <>
+              <span style={{ fontSize: 10, color: 'var(--warning)' }}>Viewing old version</span>
+              <button className="btn-primary" onClick={handleRestore} disabled={restoring}
+                style={{ padding: '4px 14px', fontSize: 10 }}>
+                {restoring ? 'Restoring…' : 'Restore'}
+              </button>
+              <button className="btn-secondary" onClick={() => handleVersionSelect(null)}
+                style={{ padding: '4px 12px', fontSize: 10 }}>
+                Back to Latest
+              </button>
+            </>
+          ) : editing ? (
+            <>
+              <button className="btn-secondary" onClick={() => { setEditorContent(savedContent); setEditing(false); }}
+                style={{ padding: '4px 12px', fontSize: 10 }}>
+                Cancel
+              </button>
+              <button className="btn-primary" onClick={handleSave}
+                disabled={!isDirty || savingContent || contentLoading}
+                style={{ padding: '4px 14px', fontSize: 10, opacity: isDirty ? 1 : 0.4 }}>
+                {savingContent ? 'Saving…' : 'Save'}
+              </button>
+            </>
           ) : (
-            <div style={{ display: 'grid', gap: 6 }}>
-              {joints
-                .filter((j) => j.joint_type !== 'fixed')
-                .map((j) => {
-                  const value = jointStates[j.joint_name] ?? 0;
-                  const min = j.lower_limit ?? -3.14;
-                  const max = j.upper_limit ?? 3.14;
-                  const range = max - min;
-                  const pct = range > 0 ? ((value - min) / range) * 100 : 50;
-
-                  return (
-                    <div key={j.joint_name} style={{
-                      display: 'grid', gridTemplateColumns: '100px 1fr 60px', gap: 8,
-                      alignItems: 'center',
-                    }}>
-                      <span style={{
-                        fontSize: 10, color: 'var(--accent)', fontFamily: 'var(--font-mono)',
-                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                      }}>
-                        {j.joint_name}
-                      </span>
-                      <div style={{
-                        height: 6, borderRadius: 3, background: 'var(--bg-surface-3)',
-                        overflow: 'hidden',
-                      }}>
-                        <div style={{
-                          height: '100%', width: `${Math.max(0, Math.min(100, pct))}%`,
-                          background: 'var(--accent)', borderRadius: 3,
-                          transition: 'width 0.1s',
-                        }} />
-                      </div>
-                      <span style={{
-                        fontSize: 10, color: 'var(--text-secondary)',
-                        fontFamily: 'var(--font-mono)', textAlign: 'right',
-                      }}>
-                        {(value * 180 / Math.PI).toFixed(1)}°
-                      </span>
-                    </div>
-                  );
-                })}
-            </div>
+            <button className="btn-secondary" onClick={() => setEditing(true)}
+              disabled={!activeFile} style={{ padding: '4px 12px', fontSize: 10 }}>
+              Edit
+            </button>
           )}
         </div>
       </div>
 
-      {/* Bottom section: Viewport + ROS Graph side by side */}
+      {/* File type sub-tabs */}
       <div style={{
-        display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16,
-        flex: 1, minHeight: 350,
+        display: 'flex', gap: 0,
+        borderBottom: '1px solid var(--border-default)',
+        flexShrink: 0,
       }}>
-        <div className="panel" style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          <div style={{
-            padding: '8px 12px', fontSize: 10, fontWeight: 600,
-            color: 'var(--text-muted)', borderBottom: '1px solid var(--border-default)',
-          }}>
-            3D VIEWPORT — Real Robot
-          </div>
-          <div style={{ flex: 1, position: 'relative' }}>
-            <Viewport3D />
-          </div>
-        </div>
-        <div className="panel" style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          <div style={{
-            padding: '8px 12px', fontSize: 10, fontWeight: 600,
-            color: 'var(--text-muted)', borderBottom: '1px solid var(--border-default)',
-          }}>
-            ROS GRAPH — Real Robot Topics
-          </div>
-          <div style={{ flex: 1, position: 'relative' }}>
-            <RQTGraphPanel />
-          </div>
-        </div>
+        {(Object.entries(FILE_TAB_META) as [FileTabType, { label: string }][]).map(([type, meta]) => {
+          const isActive = activeFileType === type;
+          const hasFile = robotFiles.some((f) => f.file_type === type);
+          const isThisDirty = isActive && isDirty;
+          return (
+            <button
+              key={type}
+              onClick={() => {
+                if (editing && isDirty) return;
+                setActiveFileType(type);
+              }}
+              style={{
+                background: isActive ? 'var(--bg-surface-2)' : 'transparent',
+                border: 'none',
+                borderBottom: isActive ? '2px solid var(--accent)' : '2px solid transparent',
+                color: isActive ? 'var(--accent)' : hasFile ? 'var(--text-secondary)' : 'var(--text-muted)',
+                cursor: (editing && isDirty && !isActive) ? 'not-allowed' : 'pointer',
+                fontSize: 11,
+                fontWeight: isActive ? 600 : 400,
+                padding: '6px 16px',
+                fontFamily: 'var(--font-mono)',
+                transition: 'color 0.15s, border-color 0.15s',
+                opacity: (editing && isDirty && !isActive) ? 0.3 : hasFile ? 1 : 0.5,
+              }}
+            >
+              {meta.label}{isThisDirty ? ' *' : ''}
+            </button>
+          );
+        })}
       </div>
+
+      {/* Editor or read-only view */}
+      <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        {editing ? (
+          <div style={{ flex: 1, minHeight: 0 }}>
+            {contentLoading ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                <Spinner />
+              </div>
+            ) : (
+              <Editor
+                key={activeFile?.file_id}
+                height="100%"
+                language={fileMeta.language}
+                value={editorContent}
+                theme="mc-amber"
+                beforeMount={defineAmberTheme}
+                onChange={(value) => setEditorContent(value ?? '')}
+                loading={<Spinner />}
+                options={{
+                  fontSize: 12,
+                  fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+                  minimap: { enabled: false },
+                  scrollBeyondLastLine: false,
+                  lineNumbers: 'on',
+                  renderLineHighlight: 'line',
+                  padding: { top: 8, bottom: 8 },
+                  wordWrap: 'on',
+                  tabSize: 2,
+                  automaticLayout: true,
+                }}
+              />
+            )}
+          </div>
+        ) : (
+          <div style={{
+            flex: 1, overflow: 'auto', background: '#0a0a0a',
+          }}>
+            {contentLoading ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                <Spinner />
+              </div>
+            ) : !activeFile ? (
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                height: '100%', color: 'var(--text-muted)', fontSize: 12,
+              }}>
+                No {fileMeta.label} file for this robot.
+              </div>
+            ) : (
+              <pre style={{
+                margin: 0, padding: 12,
+                fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+                fontSize: 12, lineHeight: 1.6,
+                color: '#d4d4d4', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+              }}>
+                {editorContent}
+              </pre>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* File path footer with version history */}
+      {activeFile && (
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '3px 8px', fontSize: 10, color: 'var(--text-muted)',
+          borderTop: '1px solid var(--border-default)', flexShrink: 0,
+        }}>
+          <span style={{ fontFamily: 'var(--font-mono)' }}>{activeFile.file_path}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {fileHistory.length > 1 ? (
+              <select
+                value={selectedVersionId || activeFile.file_id}
+                onChange={(e) => handleVersionSelect(
+                  e.target.value === activeFile.file_id ? null : e.target.value
+                )}
+                disabled={editing}
+                style={{
+                  background: 'var(--bg-surface-2)',
+                  color: 'var(--text-secondary)',
+                  border: '1px solid var(--border-default)',
+                  borderRadius: 3, fontSize: 10, padding: '2px 4px',
+                  fontFamily: 'var(--font-mono)',
+                  cursor: editing ? 'not-allowed' : 'pointer',
+                  opacity: editing ? 0.4 : 1,
+                }}
+              >
+                {fileHistory.map((h, i) => (
+                  <option key={h.file_id} value={h.file_id}>
+                    v{h.version} — {fmtDate(h.created_at)}{i === 0 ? ' (latest)' : ''}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span style={{ fontFamily: 'var(--font-mono)' }}>v{activeFile.version}</span>
+            )}
+            <StatusDot status={activeFile.status} />
+            <span>{activeFile.status}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -914,28 +951,32 @@ function RealRobotTab() {
 // Page
 // ---------------------------------------------------------------------------
 
-const TABS: { id: RobotsTabId; label: string }[] = [
-  { id: 'list', label: 'Robot List' },
-  { id: 'config', label: 'Robot Config' },
-  { id: 'isaac', label: 'Isaac Pipeline' },
-  { id: 'real', label: 'Real Robot' },
-];
-
 export default function RobotsPage() {
-  const [activeTab, setActiveTab] = useState<RobotsTabId>('list');
-  const selectedRobotId = useRobotStore((s) => s.selectedRobotId);
+  const [viewMode, setViewMode] = useState<ViewMode>('configurator');
+  const { selectedRobotId, fetchRobotFiles } = useRobotStore();
+
+  // Load robot files when switching to files view
+  useEffect(() => {
+    if (viewMode === 'files' && selectedRobotId) {
+      fetchRobotFiles(selectedRobotId);
+    }
+  }, [viewMode, selectedRobotId, fetchRobotFiles]);
 
   return (
     <div style={{
-      padding: '20px 24px',
       height: '100%',
-      overflowY: 'auto',
       display: 'flex',
       flexDirection: 'column',
       background: 'var(--bg-base)',
+      overflow: 'hidden',
     }}>
       {/* Header */}
-      <div style={{ marginBottom: 20 }}>
+      <div style={{
+        padding: '12px 16px',
+        borderBottom: '1px solid var(--border-default)',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        flexShrink: 0,
+      }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <h1 style={{
             margin: 0, fontSize: 16, fontWeight: 600,
@@ -953,18 +994,37 @@ export default function RobotsPage() {
             </span>
           )}
         </div>
-        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-          Robot asset management, simulation pipelines, and live monitoring
+
+        {/* View mode toggle */}
+        <div style={{ display: 'flex', gap: 2 }}>
+          {([
+            { id: 'configurator' as ViewMode, label: 'Configurator' },
+            { id: 'files' as ViewMode, label: 'Config Files' },
+          ]).map((v) => (
+            <button
+              key={v.id}
+              onClick={() => setViewMode(v.id)}
+              style={{
+                background: viewMode === v.id ? 'rgba(255, 170, 0, 0.1)' : 'transparent',
+                border: '1px solid',
+                borderColor: viewMode === v.id ? 'var(--accent, #ffaa00)' : 'var(--border-default)',
+                color: viewMode === v.id ? 'var(--accent, #ffaa00)' : 'var(--text-secondary)',
+                padding: '4px 14px', borderRadius: 4, fontSize: 10, cursor: 'pointer',
+                fontWeight: viewMode === v.id ? 600 : 400,
+                transition: 'all 0.15s',
+              }}
+            >
+              {v.label}
+            </button>
+          ))}
         </div>
       </div>
 
-      <TabBar tabs={TABS} active={activeTab} onSelect={setActiveTab} />
-
-      <div style={{ flex: 1, minHeight: 0 }}>
-        {activeTab === 'list' && <RobotListTab onNavigate={setActiveTab} />}
-        {activeTab === 'config' && <RobotConfigTab />}
-        {activeTab === 'isaac' && <IsaacPipelineTab />}
-        {activeTab === 'real' && <RealRobotTab />}
+      {/* Main content: left panel + right area */}
+      <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: 'hidden' }}>
+        <RobotListPanel />
+        {viewMode === 'configurator' && <ConfiguratorView />}
+        {viewMode === 'files' && <FilesView />}
       </div>
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>

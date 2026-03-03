@@ -37,7 +37,7 @@ class FileRegistry(Base):
         UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
     )
     file_type: Mapped[str] = mapped_column(String(64), nullable=False)
-    robot_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    robot_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     scene_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     version: Mapped[str] = mapped_column(String(32), nullable=False)
     file_hash: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -48,6 +48,7 @@ class FileRegistry(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     promoted_at: Mapped[datetime | None] = mapped_column(nullable=True)
     promoted_by: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    content: Mapped[str | None] = mapped_column(Text, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     STATUS_TRANSITIONS: dict[str, list[str]] = {
@@ -66,7 +67,7 @@ class BuildLog(Base):
         UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
     )
     process: Mapped[str] = mapped_column(String(64), nullable=False)
-    robot_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    robot_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, server_default="pending")
     steps: Mapped[list] = mapped_column(JSONB, nullable=False, server_default="[]")
     null_report: Mapped[list] = mapped_column(JSONB, nullable=False, server_default="[]")
@@ -144,7 +145,7 @@ class DatasetRegistry(Base):
     name: Mapped[str] = mapped_column(String(256), nullable=False)
     version: Mapped[str] = mapped_column(String(32), nullable=False)
     source_bag_paths: Mapped[list] = mapped_column(JSONB, nullable=False, server_default="[]")
-    robot_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    robot_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     scene_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     labels: Mapped[list] = mapped_column(JSONB, nullable=False, server_default="[]")
     split: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
@@ -292,3 +293,71 @@ class WorkflowRunLog(Base):
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     duration_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
+# =============================================================================
+# 0003 — Robot Builder Tables
+# =============================================================================
+
+
+class ComponentRegistry(Base):
+    __tablename__ = "component_registry"
+
+    component_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    category: Mapped[str] = mapped_column(String(64), nullable=False)
+    manufacturer: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    model: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    physics: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
+    attachment_interfaces: Mapped[list] = mapped_column(JSONB, nullable=False, server_default="[]")
+    data_sources: Mapped[list] = mapped_column(JSONB, nullable=False, server_default="[]")
+    approval_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default="pending_hit"
+    )
+    approved_by: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    visual_mesh_file_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    collision_mesh_file_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    source_mesh_file_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    thumbnail_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
+class ConfigurationPackage(Base):
+    __tablename__ = "configuration_packages"
+
+    package_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    package_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    component_tree: Mapped[list] = mapped_column(JSONB, nullable=False, server_default="[]")
+    total_mass_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
+class RobotConfiguration(Base):
+    __tablename__ = "robot_configurations"
+
+    config_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    robot_id: Mapped[str] = mapped_column(
+        String(128), ForeignKey("robots.robot_id"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    base_type: Mapped[str] = mapped_column(String(32), nullable=False, server_default="standing")
+    base_config: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
+    payload_package_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    sensor_package_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, server_default="draft")
+    generated_files: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
+    validation_report_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(server_default=func.now())

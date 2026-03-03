@@ -1,0 +1,20 @@
+appId: com.missioncontrol.desktop
+productName: Mission Control
+directories:
+  output: dist
+  buildResources: assets
+files:
+  - main/**/*.js
+  - preload/**/*.js
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - dmg
+    - zip
+linux:
+  target:
+    - AppImage
+    - deb
+win:
+  target:
+    - nsis

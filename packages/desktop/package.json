@@ -1,0 +1,17 @@
+{
+  "name": "@mission-control/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "main": "main/main.ts",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev"
+  },
+  "dependencies": {
+    "@mission-control/core": "workspace:*"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "typescript": "^5.5.0"
+  }
+}

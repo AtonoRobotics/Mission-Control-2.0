@@ -65,3 +65,4 @@ logs/
 
 # Workflows — YAML exports ARE committed (version controlled)
 # !workflows/**/*.yaml  ← already tracked, no rule needed
+packages/web/.vite/

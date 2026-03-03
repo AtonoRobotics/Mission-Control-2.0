@@ -74,6 +74,9 @@ class Settings(BaseSettings):
     MC_S3_REGION: str = "us-east-1"
     MC_S3_PRESIGN_EXPIRE: int = 3600
 
+    # --- OSMO (workflow orchestration) ---
+    MC_OSMO_URL: str = ""
+
     # --- Tailscale ---
     MC_TAILSCALE_ONLY: bool = False  # bind to Tailscale interface only
     MC_TAILSCALE_INTERFACE: str = "tailscale0"

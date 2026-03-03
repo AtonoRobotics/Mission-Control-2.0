@@ -1,8 +1,9 @@
 """
 Mission Control API — Workflow Routes
-Workflow graph CRUD, run lifecycle, and per-node execution logs.
+Workflow graph CRUD, run lifecycle, execution, and per-node logs.
 """
 
+import asyncio
 from datetime import datetime
 from typing import Optional
 from uuid import UUID
@@ -14,11 +15,25 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import func
 
-from db.registry.models import WorkflowGraph, WorkflowRun, WorkflowRunLog
-from db.session import get_registry_session
+from db.registry.models import WorkflowGraph as WorkflowGraphModel, WorkflowRun, WorkflowRunLog
+from db.session import get_registry_session, get_registry_session_context
+from workflow_engine.executor import WorkflowExecutor
+from workflow_engine.graph_parser import WorkflowGraphParser
+from workflow_engine.node_registry import build_node_registry
 
 logger = structlog.get_logger(__name__)
 router = APIRouter()
+
+# Module-level executor — initialized once, reused across requests
+_executor: WorkflowExecutor | None = None
+
+
+def _get_executor() -> WorkflowExecutor:
+    global _executor
+    if _executor is None:
+        registry = build_node_registry()
+        _executor = WorkflowExecutor(registry)
+    return _executor
 
 
 # =============================================================================
@@ -104,8 +119,8 @@ async def list_graphs(
     session: AsyncSession = Depends(get_registry_session),
 ):
     stmt = (
-        select(WorkflowGraph)
-        .order_by(WorkflowGraph.created_at.desc())
+        select(WorkflowGraphModel)
+        .order_by(WorkflowGraphModel.created_at.desc())
         .limit(limit)
         .offset(offset)
     )
@@ -118,7 +133,7 @@ async def create_graph(
     body: GraphCreate,
     session: AsyncSession = Depends(get_registry_session),
 ):
-    graph = WorkflowGraph(
+    graph = WorkflowGraphModel(
         name=body.name,
         version=body.version,
         description=body.description,
@@ -138,7 +153,7 @@ async def get_graph(
     session: AsyncSession = Depends(get_registry_session),
 ):
     result = await session.execute(
-        select(WorkflowGraph).where(WorkflowGraph.graph_id == graph_id)
+        select(WorkflowGraphModel).where(WorkflowGraphModel.graph_id == graph_id)
     )
     graph = result.scalar_one_or_none()
     if not graph:
@@ -166,6 +181,70 @@ async def create_run(
     await session.refresh(run)
     logger.info("workflow_run_created", run_id=str(run.run_id), graph_name=body.graph_name)
     return run
+
+
+@router.post("/graphs/{graph_id}/execute", response_model=RunOut, status_code=202)
+async def execute_graph(
+    graph_id: UUID,
+    session: AsyncSession = Depends(get_registry_session),
+):
+    """Parse a workflow graph and execute it. Returns immediately; execution runs in background."""
+    result = await session.execute(
+        select(WorkflowGraphModel).where(WorkflowGraphModel.graph_id == graph_id)
+    )
+    graph_model = result.scalar_one_or_none()
+    if not graph_model:
+        raise HTTPException(status_code=404, detail="Workflow graph not found")
+
+    # Parse the stored graph JSON into an executable graph
+    try:
+        parsed = WorkflowGraphParser.from_dict(graph_model.graph_json)
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=422, detail=f"Invalid graph definition: {e}")
+
+    # Create DB run record
+    db_run = WorkflowRun(
+        graph_id=graph_id,
+        graph_name=graph_model.name,
+        status="running",
+    )
+    session.add(db_run)
+    await session.flush()
+    await session.refresh(db_run)
+    run_id = str(db_run.run_id)
+
+    # Execute in background — update DB when done
+    executor = _get_executor()
+    engine_run = await executor.execute(parsed)
+
+    async def _sync_run_to_db():
+        """Poll engine run status and sync results to DB when complete."""
+        while engine_run.status == "running":
+            await asyncio.sleep(1.0)
+        async with get_registry_session_context() as s:
+            res = await s.execute(
+                select(WorkflowRun).where(WorkflowRun.run_id == run_id)
+            )
+            r = res.scalar_one_or_none()
+            if r:
+                r.status = "completed" if engine_run.status == "complete" else "failed"
+                r.completed_at = func.now()
+                r.node_results = {
+                    nid: {
+                        "status": nr.status,
+                        "output": nr.output,
+                        "error": nr.error,
+                        "duration_ms": nr.duration_ms,
+                    }
+                    for nid, nr in engine_run.node_results.items()
+                }
+                await s.commit()
+                logger.info("workflow_run_synced", run_id=run_id, status=r.status)
+
+    asyncio.create_task(_sync_run_to_db())
+
+    logger.info("workflow_execution_started", run_id=run_id, graph_name=graph_model.name)
+    return db_run
 
 
 @router.get("/runs", response_model=list[RunOut])

@@ -44,19 +44,19 @@ export const WORKSPACE_LAYOUTS: Record<WorkspaceMode, LayoutPreset> = {
     name: 'Scene',
     layout: {
       direction: 'row',
-      first: 'viewport3d',
+      first: 'scene-hierarchy',
       second: {
-        direction: 'column',
-        first: 'displays',
-        second: 'properties',
-        splitPercentage: 50,
+        direction: 'row',
+        first: 'scene-viewport',
+        second: 'scene-properties',
+        splitPercentage: 75,
       },
-      splitPercentage: 70,
+      splitPercentage: 20,
     },
     panelConfigs: {
-      viewport3d: pc('viewport3d'),
-      displays: pc('displays'),
-      properties: pc('properties'),
+      'scene-hierarchy': pc('scene-hierarchy'),
+      'scene-viewport': pc('scene-viewport'),
+      'scene-properties': pc('scene-properties'),
     },
   },
   motion: {

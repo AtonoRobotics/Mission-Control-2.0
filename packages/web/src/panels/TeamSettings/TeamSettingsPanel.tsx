@@ -4,6 +4,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Users, UserPlus, Trash2 } from 'lucide-react';
+import api from '@/services/api';
 
 interface TeamMember {
   user_id: string;
@@ -39,9 +40,9 @@ export default function TeamSettingsPanel(_props: any) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/mc/api/users')
-      .then((r) => (r.ok ? r.json() : []))
-      .then((data) => setMembers(data))
+    api.get('/users')
+      .then(({ data }) => setMembers(data))
+      .catch(() => setMembers([]))
       .finally(() => setLoading(false));
   }, []);
 
@@ -50,17 +51,10 @@ export default function TeamSettingsPanel(_props: any) {
       e.preventDefault();
       if (!inviteEmail) return;
       try {
-        const resp = await fetch('/mc/api/users/invite', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: inviteEmail, role: inviteRole }),
-        });
-        if (resp.ok) {
-          const user = await resp.json();
-          setMembers((prev) => [...prev, user]);
-          setInviteEmail('');
-          setInviteRole('viewer');
-        }
+        const { data: user } = await api.post('/users/invite', { email: inviteEmail, role: inviteRole });
+        setMembers((prev) => [...prev, user]);
+        setInviteEmail('');
+        setInviteRole('viewer');
       } catch (e) {
         console.error('Invite failed:', e);
       }
@@ -70,10 +64,8 @@ export default function TeamSettingsPanel(_props: any) {
 
   const handleRemove = useCallback(async (userId: string) => {
     try {
-      const resp = await fetch(`/mc/api/users/${userId}`, { method: 'DELETE' });
-      if (resp.ok) {
-        setMembers((prev) => prev.filter((m) => m.user_id !== userId));
-      }
+      await api.delete(`/users/${userId}`);
+      setMembers((prev) => prev.filter((m) => m.user_id !== userId));
     } catch (e) {
       console.error('Remove failed:', e);
     }

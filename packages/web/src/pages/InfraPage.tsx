@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import api from '@/services/api';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -59,9 +60,7 @@ function ContainersTab() {
 
   const fetch_ = useCallback(async () => {
     try {
-      const res = await fetch('/mc/api/containers');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data: ContainerInfo[] = await res.json();
+      const { data } = await api.get<ContainerInfo[]>('/containers');
       setContainers(data);
       setError(null);
     } catch (err) {
@@ -160,25 +159,15 @@ function Ros2Tab() {
 
   const fetchAll = useCallback(async () => {
     try {
-      const [statusRes, topicsRes, nodesRes] = await Promise.all([
-        fetch('/mc/api/ros2/status'),
-        fetch('/mc/api/ros2/topics'),
-        fetch('/mc/api/ros2/nodes'),
+      const [sRes, tRes, nRes] = await Promise.all([
+        api.get<Ros2Status>('/ros2/status'),
+        api.get<Ros2Topic[]>('/ros2/topics'),
+        api.get<string[]>('/ros2/nodes'),
       ]);
 
-      if (!statusRes.ok) throw new Error(`status HTTP ${statusRes.status}`);
-      if (!topicsRes.ok) throw new Error(`topics HTTP ${topicsRes.status}`);
-      if (!nodesRes.ok)  throw new Error(`nodes HTTP ${nodesRes.status}`);
-
-      const [s, t, n] = await Promise.all([
-        statusRes.json() as Promise<Ros2Status>,
-        topicsRes.json() as Promise<Ros2Topic[]>,
-        nodesRes.json()  as Promise<string[]>,
-      ]);
-
-      setStatus(s);
-      setTopics(t);
-      setNodes(n);
+      setStatus(sRes.data);
+      setTopics(tRes.data);
+      setNodes(nRes.data);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load ROS2 data');
@@ -348,9 +337,7 @@ function IsaacTab() {
 
   const fetch_ = useCallback(async () => {
     try {
-      const res = await fetch('/mc/api/isaac/status');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data: IsaacStatus = await res.json();
+      const { data } = await api.get<IsaacStatus>('/isaac/status');
       setIsaacStatus(data);
       setError(null);
     } catch (err) {

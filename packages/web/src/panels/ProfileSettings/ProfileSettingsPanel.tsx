@@ -4,6 +4,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { User, Save, Check } from 'lucide-react';
+import api from '@/services/api';
 
 const labelStyle: React.CSSProperties = {
   display: 'block',
@@ -40,30 +41,22 @@ export default function ProfileSettingsPanel(_props: any) {
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    fetch('/mc/api/users/me')
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (data) {
-          setDisplayName(data.display_name || '');
-          setEmail(data.email || '');
-          setAvatarUrl(data.avatar_url || '');
-        }
-      });
+    api.get('/users/me')
+      .then(({ data }) => {
+        setDisplayName(data.display_name || '');
+        setEmail(data.email || '');
+        setAvatarUrl(data.avatar_url || '');
+      })
+      .catch(() => {});
   }, []);
 
   const handleSave = useCallback(async () => {
     setSaving(true);
     setSaved(false);
     try {
-      const resp = await fetch('/mc/api/users/me', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ display_name: displayName, avatar_url: avatarUrl }),
-      });
-      if (resp.ok) {
-        setSaved(true);
-        setTimeout(() => setSaved(false), 2000);
-      }
+      await api.patch('/users/me', { display_name: displayName, avatar_url: avatarUrl });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
     } catch (e) {
       console.error('Save failed:', e);
     } finally {

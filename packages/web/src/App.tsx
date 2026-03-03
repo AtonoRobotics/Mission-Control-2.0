@@ -54,6 +54,9 @@ import CloudSettingsPanel from '@/panels/CloudSettings/CloudSettingsPanel';
 import TeamSettingsPanel from '@/panels/TeamSettings/TeamSettingsPanel';
 import ProfileSettingsPanel from '@/panels/ProfileSettings/ProfileSettingsPanel';
 import NotificationCenterPanel from '@/panels/NotificationCenter/NotificationCenterPanel';
+import SceneViewportPanel from '@/panels/scene/SceneViewportPanel';
+import SceneHierarchyPanel from '@/panels/scene/SceneHierarchyPanel';
+import ScenePropertiesPanel from '@/panels/scene/ScenePropertiesPanel';
 
 // Register all panels
 registerPanel({ id: 'viewport3d', title: '3D Viewport', category: '3d-spatial', component: Viewport3D, platforms: ['web', 'desktop'] });
@@ -100,6 +103,9 @@ registerPanel({ id: 'cloud-settings', title: 'Cloud Settings', category: 'infras
 registerPanel({ id: 'team-settings', title: 'Team Settings', category: 'infrastructure', component: TeamSettingsPanel, platforms: ['web', 'desktop'] });
 registerPanel({ id: 'profile-settings', title: 'Profile', category: 'infrastructure', component: ProfileSettingsPanel, platforms: ['web', 'desktop'] });
 registerPanel({ id: 'notifications', title: 'Notifications', category: 'infrastructure', component: NotificationCenterPanel, platforms: ['web', 'desktop', 'ios'] });
+registerPanel({ id: 'scene-viewport', title: 'Scene Viewport', category: '3d-spatial', component: SceneViewportPanel, platforms: ['web', 'desktop'] });
+registerPanel({ id: 'scene-hierarchy', title: 'Scene Hierarchy', category: '3d-spatial', component: SceneHierarchyPanel, platforms: ['web', 'desktop'] });
+registerPanel({ id: 'scene-properties', title: 'Scene Properties', category: '3d-spatial', component: ScenePropertiesPanel, platforms: ['web', 'desktop'] });
 
 // Register all display types
 initDisplays();

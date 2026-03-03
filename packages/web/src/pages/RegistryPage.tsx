@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import api from '@/services/api';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -210,9 +211,7 @@ function FilesTab() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/mc/api/registry/files?limit=50');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
+      const { data } = await api.get('/registry/files', { params: { limit: 50 } });
       setFiles(data.files ?? []);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load files');
@@ -409,9 +408,7 @@ function BuildsTab() {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch('/mc/api/builds?limit=50');
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
+        const { data } = await api.get('/builds', { params: { limit: 50 } });
         setBuilds(data.builds ?? []);
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed to load builds');
@@ -548,9 +545,7 @@ function RobotsTab() {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch('/mc/api/registry/robots');
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
+        const { data } = await api.get('/registry/robots');
         setRobots(Array.isArray(data) ? data : []);
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed to load robots');
@@ -622,9 +617,7 @@ function ScenesTab() {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch('/mc/api/registry/scenes');
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
+        const { data } = await api.get('/registry/scenes');
         setScenes(Array.isArray(data) ? data : []);
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed to load scenes');

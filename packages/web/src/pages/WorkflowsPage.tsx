@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import api from '@/services/api';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -318,9 +319,7 @@ function RunsTab({
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/mc/api/workflows/runs?limit=50');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
+      const { data } = await api.get('/workflows/runs', { params: { limit: 50 } });
       setRuns(data.runs ?? []);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load runs');
@@ -488,9 +487,7 @@ export default function WorkflowsPage() {
     setGraphsLoading(true);
     setGraphsError(null);
     try {
-      const res = await fetch('/mc/api/workflows/graphs');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
+      const { data } = await api.get('/workflows/graphs');
       setGraphs(Array.isArray(data) ? data : []);
     } catch (e) {
       setGraphsError(e instanceof Error ? e.message : 'Failed to load graphs');
@@ -502,15 +499,7 @@ export default function WorkflowsPage() {
   useEffect(() => { loadGraphs(); }, [loadGraphs]);
 
   const handleNewRun = useCallback(async (graphId: string) => {
-    const res = await fetch('/mc/api/workflows/runs', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ graph_id: graphId }),
-    });
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw new Error(`HTTP ${res.status}${body ? `: ${body}` : ''}`);
-    }
+    await api.post('/workflows/runs', { graph_id: graphId });
   }, []);
 
   return (

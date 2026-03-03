@@ -3,6 +3,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import api from '@/services/api';
 
 interface RecordingEntry {
   recording_id: string;
@@ -72,12 +73,12 @@ export default function McapBrowserPanel(_props: any) {
   const fetchRecordings = useCallback(async () => {
     setLoading(true);
     try {
-      const [ownResp, sharedResp] = await Promise.all([
-        fetch('/mc/api/recordings/'),
-        fetch('/mc/api/recordings/shared/list'),
+      const [ownRes, sharedRes] = await Promise.allSettled([
+        api.get('/recordings/'),
+        api.get('/recordings/shared/list'),
       ]);
-      const own = ownResp.ok ? await ownResp.json() : [];
-      const shared = sharedResp.ok ? await sharedResp.json() : [];
+      const own = ownRes.status === 'fulfilled' ? ownRes.value.data : [];
+      const shared = sharedRes.status === 'fulfilled' ? sharedRes.value.data : [];
       // Merge, deduplicate by recording_id
       const map = new Map<string, RecordingEntry>();
       for (const r of [...own, ...shared]) map.set(r.recording_id, r);

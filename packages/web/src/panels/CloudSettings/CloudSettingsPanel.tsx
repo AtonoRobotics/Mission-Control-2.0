@@ -5,6 +5,7 @@
 
 import { useState, useCallback } from 'react';
 import { Cloud, CheckCircle, XCircle, Loader2, Upload } from 'lucide-react';
+import api from '@/services/api';
 
 interface ConnectionResult {
   ok: boolean;
@@ -55,12 +56,8 @@ export default function CloudSettingsPanel(_props: any) {
     setTesting(true);
     setTestResult(null);
     try {
-      const resp = await fetch('/mc/api/cloud/test');
-      if (resp.ok) {
-        setTestResult(await resp.json());
-      } else {
-        setTestResult({ ok: false, bucket: bucket, error: `HTTP ${resp.status}` });
-      }
+      const { data } = await api.get('/cloud/test');
+      setTestResult(data);
     } catch (e) {
       setTestResult({ ok: false, bucket: bucket, error: 'Network error' });
     } finally {

@@ -6,6 +6,7 @@
 import { create } from 'zustand';
 import type { MosaicNode, MosaicDirection } from 'react-mosaic-component';
 import { toSavedLayouts } from '@/layouts/defaults';
+import api from '@/services/api';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -190,13 +191,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
     const { layout, panelConfigs, savedLayouts } = get();
     set({ syncing: true, lastSyncError: null });
     try {
-      const resp = await fetch('/mc/api/layouts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, layout_json: { layout, panelConfigs } }),
-      });
-      if (!resp.ok) throw new Error(`Save failed: ${resp.status}`);
-      const data = await resp.json();
+      const { data } = await api.post('/layouts', { name, layout_json: { layout, panelConfigs } });
       const saved: SavedLayout = {
         id: data.layout_id,
         name: data.name,
@@ -213,9 +208,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
   fetchLayouts: async () => {
     set({ syncing: true, lastSyncError: null });
     try {
-      const resp = await fetch('/mc/api/layouts');
-      if (!resp.ok) throw new Error(`Fetch failed: ${resp.status}`);
-      const data = await resp.json();
+      const { data } = await api.get('/layouts');
       // Merge server layouts with local defaults
       const defaults = toSavedLayouts();
       const serverLayouts: SavedLayout[] = data.map((l: any) => ({

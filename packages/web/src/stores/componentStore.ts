@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import api from '@/services/api';
 
 interface ComponentPhysics {
   mass_kg: number | null;
@@ -70,13 +71,11 @@ export const useComponentStore = create<ComponentState>()((set) => ({
   fetchComponents: async (category?: string, status?: string) => {
     set({ loading: true, error: null });
     try {
-      const params = new URLSearchParams();
-      if (category) params.set('category', category);
-      if (status) params.set('approval_status', status);
-      const qs = params.toString();
-      const res = await fetch(`/mc/api/components${qs ? `?${qs}` : ''}`);
-      if (!res.ok) throw new Error(await res.text());
-      set({ components: await res.json(), loading: false });
+      const params: Record<string, string> = {};
+      if (category) params.category = category;
+      if (status) params.approval_status = status;
+      const { data } = await api.get('/components', { params });
+      set({ components: data, loading: false });
     } catch (e) {
       set({ error: (e as Error).message, loading: false });
     }
@@ -85,13 +84,7 @@ export const useComponentStore = create<ComponentState>()((set) => ({
   createComponent: async (data) => {
     set({ loading: true, error: null });
     try {
-      const res = await fetch('/mc/api/components', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      const created = await res.json();
+      const { data: created } = await api.post('/components', data);
       set((s) => ({ components: [...s.components, created], loading: false }));
     } catch (e) {
       set({ error: (e as Error).message, loading: false });
@@ -101,13 +94,7 @@ export const useComponentStore = create<ComponentState>()((set) => ({
   updateComponent: async (id, data) => {
     set({ error: null });
     try {
-      const res = await fetch(`/mc/api/components/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      const updated = await res.json();
+      const { data: updated } = await api.patch(`/components/${id}`, data);
       set((s) => ({
         components: s.components.map((c) => (c.component_id === id ? updated : c)),
       }));
@@ -118,8 +105,7 @@ export const useComponentStore = create<ComponentState>()((set) => ({
 
   approveComponent: async (id) => {
     try {
-      const res = await fetch(`/mc/api/components/${id}/approve`, { method: 'POST' });
-      if (!res.ok) throw new Error(await res.text());
+      await api.post(`/components/${id}/approve`);
       set((s) => ({
         components: s.components.map((c) =>
           c.component_id === id ? { ...c, approval_status: 'approved' as const } : c
@@ -132,8 +118,7 @@ export const useComponentStore = create<ComponentState>()((set) => ({
 
   rejectComponent: async (id) => {
     try {
-      const res = await fetch(`/mc/api/components/${id}/reject`, { method: 'POST' });
-      if (!res.ok) throw new Error(await res.text());
+      await api.post(`/components/${id}/reject`);
       set((s) => ({
         components: s.components.map((c) =>
           c.component_id === id ? { ...c, approval_status: 'rejected' as const } : c
@@ -146,8 +131,7 @@ export const useComponentStore = create<ComponentState>()((set) => ({
 
   deleteComponent: async (id) => {
     try {
-      const res = await fetch(`/mc/api/components/${id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error(await res.text());
+      await api.delete(`/components/${id}`);
       set((s) => ({
         components: s.components.filter((c) => c.component_id !== id),
         selectedId: s.selectedId === id ? null : s.selectedId,

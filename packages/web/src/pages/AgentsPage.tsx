@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import api from '@/services/api';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -265,9 +266,7 @@ export default function AgentsPage() {
 
   const fetchSummaries = useCallback(async () => {
     try {
-      const res = await fetch('/mc/api/agents/summary');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data: AgentSummary[] = await res.json();
+      const { data } = await api.get<AgentSummary[]>('/agents/summary');
       setSummaries(data);
       setSummaryError(null);
     } catch (err) {
@@ -277,16 +276,14 @@ export default function AgentsPage() {
 
   const fetchLogs = useCallback(async () => {
     try {
-      const params = new URLSearchParams({
+      const params: Record<string, string> = {
         limit: String(PAGE_SIZE),
         offset: String(page * PAGE_SIZE),
-      });
-      if (filterAgent)  params.set('agent_name', filterAgent);
-      if (filterStatus) params.set('status', filterStatus);
+      };
+      if (filterAgent)  params.agent_name = filterAgent;
+      if (filterStatus) params.status = filterStatus;
 
-      const res = await fetch(`/mc/api/agents/logs?${params}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data: AgentLogsResponse = await res.json();
+      const { data } = await api.get<AgentLogsResponse>('/agents/logs', { params });
       setLogs(data.logs ?? []);
       setLogsTotal(data.total ?? 0);
       setLogsError(null);

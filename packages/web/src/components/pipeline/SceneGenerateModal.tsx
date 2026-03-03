@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSceneStore } from '@/stores/sceneStore';
+import api from '@/services/api';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -79,11 +80,8 @@ export default function SceneGenerateModal({ open, onClose }: SceneGenerateModal
     if (!open) return;
     let cancelled = false;
     setRobotsLoading(true);
-    fetch('/mc/api/registry/robots')
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json();
-      })
+    api.get<RobotOption[]>('/registry/robots')
+      .then(({ data }) => data)
       .then((data: RobotOption[]) => {
         if (cancelled) return;
         setRobots(Array.isArray(data) ? data : []);

@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import func
 
-from db.registry.models import FileRegistry, Robot, SceneRegistry
+from db.registry.models import FileRegistry, LaunchTemplate, Robot, SceneRegistry, SensorConfig
 from db.session import get_registry_session
 from services.robot_file_generator import generate_curobo_yaml, generate_urdf, generate_usd
 
@@ -216,7 +216,17 @@ async def create_file(
     return entry
 
 
-@router.patch("/files/{file_id}/status", response_model=FileOut)
+class ValidationReport(BaseModel):
+    passed: bool
+    errors: list[str]
+    warnings: list[str]
+
+
+class StatusUpdateResponse(FileOut):
+    validation: Optional[ValidationReport] = None
+
+
+@router.patch("/files/{file_id}/status", response_model=StatusUpdateResponse)
 async def update_file_status(
     file_id: UUID,
     body: StatusUpdate,
@@ -236,6 +246,34 @@ async def update_file_status(
             detail=f"Cannot transition from '{entry.status}' to '{body.status}'. "
             f"Allowed: {allowed}",
         )
+
+    # Run validation chain for guarded transitions
+    validation_report = None
+    if body.status in ("validated", "promoted"):
+        from services.file_validator import validate_for_status_change
+
+        content = getattr(entry, "content", None)
+        result = await validate_for_status_change(entry, body.status, content)
+
+        validation_report = ValidationReport(
+            passed=result.passed,
+            errors=result.errors,
+            warnings=result.warnings,
+        )
+
+        if not result.passed:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "message": f"Validation failed for '{entry.status}' → '{body.status}'",
+                    "errors": result.errors,
+                    "warnings": result.warnings,
+                },
+            )
+
+        # Populate null_fields from validation findings
+        if result.null_fields:
+            entry.null_fields = result.null_fields
 
     entry.status = body.status
     if body.status == "promoted":
@@ -648,6 +686,284 @@ async def delete_scene(
     await session.delete(scene)
     await session.flush()
     logger.info("scene_deleted", scene_id=str(scene_id))
+
+
+# =============================================================================
+# Sensor Config Endpoints
+# =============================================================================
+
+
+class SensorConfigCreate(BaseModel):
+    sensor_id: str
+    sensor_type: str
+    robot_id: Optional[str] = None
+    setup_id: Optional[str] = None
+    file_id: Optional[UUID] = None
+    calibration_status: str = "uncalibrated"
+    null_fields: Optional[dict] = None
+    topic_names: Optional[list] = None
+    notes: Optional[str] = None
+
+
+class SensorConfigUpdate(BaseModel):
+    sensor_id: Optional[str] = None
+    sensor_type: Optional[str] = None
+    robot_id: Optional[str] = None
+    setup_id: Optional[str] = None
+    file_id: Optional[UUID] = None
+    calibration_status: Optional[str] = None
+    null_fields: Optional[dict] = None
+    topic_names: Optional[list] = None
+    notes: Optional[str] = None
+
+
+class SensorConfigOut(BaseModel):
+    config_id: UUID
+    sensor_id: str
+    sensor_type: str
+    robot_id: Optional[str]
+    setup_id: Optional[str]
+    file_id: Optional[UUID]
+    calibration_status: str
+    null_fields: Optional[dict]
+    topic_names: Optional[list]
+    notes: Optional[str]
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+@router.post("/sensors", response_model=SensorConfigOut, status_code=201)
+async def create_sensor_config(
+    body: SensorConfigCreate,
+    session: AsyncSession = Depends(get_registry_session),
+):
+    entry = SensorConfig(
+        sensor_id=body.sensor_id,
+        sensor_type=body.sensor_type,
+        robot_id=body.robot_id,
+        setup_id=body.setup_id,
+        file_id=body.file_id,
+        calibration_status=body.calibration_status,
+        null_fields=body.null_fields,
+        topic_names=body.topic_names,
+        notes=body.notes,
+    )
+    session.add(entry)
+    await session.flush()
+    await session.refresh(entry)
+    logger.info("sensor_config_created", config_id=str(entry.config_id), sensor_id=body.sensor_id)
+    return entry
+
+
+@router.get("/sensors", response_model=list[SensorConfigOut])
+async def list_sensor_configs(
+    robot_id: Optional[str] = Query(None),
+    sensor_type: Optional[str] = Query(None),
+    limit: int = Query(100, le=500),
+    offset: int = Query(0, ge=0),
+    session: AsyncSession = Depends(get_registry_session),
+):
+    stmt = select(SensorConfig).order_by(SensorConfig.created_at.desc())
+    if robot_id is not None:
+        stmt = stmt.where(SensorConfig.robot_id == robot_id)
+    if sensor_type is not None:
+        stmt = stmt.where(SensorConfig.sensor_type == sensor_type)
+    stmt = stmt.limit(limit).offset(offset)
+    result = await session.execute(stmt)
+    return result.scalars().all()
+
+
+@router.get("/sensors/{config_id}", response_model=SensorConfigOut)
+async def get_sensor_config(
+    config_id: UUID,
+    session: AsyncSession = Depends(get_registry_session),
+):
+    result = await session.execute(
+        select(SensorConfig).where(SensorConfig.config_id == config_id)
+    )
+    entry = result.scalar_one_or_none()
+    if not entry:
+        raise HTTPException(status_code=404, detail="Sensor config not found")
+    return entry
+
+
+@router.patch("/sensors/{config_id}", response_model=SensorConfigOut)
+async def update_sensor_config(
+    config_id: UUID,
+    body: SensorConfigUpdate,
+    session: AsyncSession = Depends(get_registry_session),
+):
+    result = await session.execute(
+        select(SensorConfig).where(SensorConfig.config_id == config_id)
+    )
+    entry = result.scalar_one_or_none()
+    if not entry:
+        raise HTTPException(status_code=404, detail="Sensor config not found")
+
+    for field, value in body.model_dump(exclude_none=True).items():
+        setattr(entry, field, value)
+
+    await session.flush()
+    await session.refresh(entry)
+    logger.info("sensor_config_updated", config_id=str(config_id))
+    return entry
+
+
+@router.delete("/sensors/{config_id}", status_code=204)
+async def delete_sensor_config(
+    config_id: UUID,
+    session: AsyncSession = Depends(get_registry_session),
+):
+    result = await session.execute(
+        select(SensorConfig).where(SensorConfig.config_id == config_id)
+    )
+    entry = result.scalar_one_or_none()
+    if not entry:
+        raise HTTPException(status_code=404, detail="Sensor config not found")
+
+    await session.delete(entry)
+    await session.flush()
+    logger.info("sensor_config_deleted", config_id=str(config_id))
+
+
+# =============================================================================
+# Launch Template Endpoints
+# =============================================================================
+
+
+class LaunchTemplateCreate(BaseModel):
+    name: str
+    pipeline_type: str
+    robot_id: Optional[str] = None
+    file_id: Optional[UUID] = None
+    node_list: list = Field(default_factory=list)
+    topic_connectivity: Optional[dict] = None
+    null_fields: Optional[dict] = None
+    status: str = "draft"
+    notes: Optional[str] = None
+
+
+class LaunchTemplateUpdate(BaseModel):
+    name: Optional[str] = None
+    pipeline_type: Optional[str] = None
+    robot_id: Optional[str] = None
+    file_id: Optional[UUID] = None
+    node_list: Optional[list] = None
+    topic_connectivity: Optional[dict] = None
+    null_fields: Optional[dict] = None
+    status: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class LaunchTemplateOut(BaseModel):
+    template_id: UUID
+    name: str
+    pipeline_type: str
+    robot_id: Optional[str]
+    file_id: Optional[UUID]
+    node_list: list
+    topic_connectivity: Optional[dict]
+    null_fields: Optional[dict]
+    status: str
+    notes: Optional[str]
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+@router.post("/launch-templates", response_model=LaunchTemplateOut, status_code=201)
+async def create_launch_template(
+    body: LaunchTemplateCreate,
+    session: AsyncSession = Depends(get_registry_session),
+):
+    entry = LaunchTemplate(
+        name=body.name,
+        pipeline_type=body.pipeline_type,
+        robot_id=body.robot_id,
+        file_id=body.file_id,
+        node_list=body.node_list,
+        topic_connectivity=body.topic_connectivity,
+        null_fields=body.null_fields,
+        status=body.status,
+        notes=body.notes,
+    )
+    session.add(entry)
+    await session.flush()
+    await session.refresh(entry)
+    logger.info("launch_template_created", template_id=str(entry.template_id), name=body.name)
+    return entry
+
+
+@router.get("/launch-templates", response_model=list[LaunchTemplateOut])
+async def list_launch_templates(
+    robot_id: Optional[str] = Query(None),
+    pipeline_type: Optional[str] = Query(None),
+    limit: int = Query(100, le=500),
+    offset: int = Query(0, ge=0),
+    session: AsyncSession = Depends(get_registry_session),
+):
+    stmt = select(LaunchTemplate).order_by(LaunchTemplate.created_at.desc())
+    if robot_id is not None:
+        stmt = stmt.where(LaunchTemplate.robot_id == robot_id)
+    if pipeline_type is not None:
+        stmt = stmt.where(LaunchTemplate.pipeline_type == pipeline_type)
+    stmt = stmt.limit(limit).offset(offset)
+    result = await session.execute(stmt)
+    return result.scalars().all()
+
+
+@router.get("/launch-templates/{template_id}", response_model=LaunchTemplateOut)
+async def get_launch_template(
+    template_id: UUID,
+    session: AsyncSession = Depends(get_registry_session),
+):
+    result = await session.execute(
+        select(LaunchTemplate).where(LaunchTemplate.template_id == template_id)
+    )
+    entry = result.scalar_one_or_none()
+    if not entry:
+        raise HTTPException(status_code=404, detail="Launch template not found")
+    return entry
+
+
+@router.patch("/launch-templates/{template_id}", response_model=LaunchTemplateOut)
+async def update_launch_template(
+    template_id: UUID,
+    body: LaunchTemplateUpdate,
+    session: AsyncSession = Depends(get_registry_session),
+):
+    result = await session.execute(
+        select(LaunchTemplate).where(LaunchTemplate.template_id == template_id)
+    )
+    entry = result.scalar_one_or_none()
+    if not entry:
+        raise HTTPException(status_code=404, detail="Launch template not found")
+
+    for field, value in body.model_dump(exclude_none=True).items():
+        setattr(entry, field, value)
+
+    await session.flush()
+    await session.refresh(entry)
+    logger.info("launch_template_updated", template_id=str(template_id))
+    return entry
+
+
+@router.delete("/launch-templates/{template_id}", status_code=204)
+async def delete_launch_template(
+    template_id: UUID,
+    session: AsyncSession = Depends(get_registry_session),
+):
+    result = await session.execute(
+        select(LaunchTemplate).where(LaunchTemplate.template_id == template_id)
+    )
+    entry = result.scalar_one_or_none()
+    if not entry:
+        raise HTTPException(status_code=404, detail="Launch template not found")
+
+    await session.delete(entry)
+    await session.flush()
+    logger.info("launch_template_deleted", template_id=str(template_id))
 
 
 # =============================================================================

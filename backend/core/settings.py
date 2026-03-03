@@ -69,6 +69,13 @@ class Settings(BaseSettings):
     # --- Security ---
     MC_SECRET_KEY: str
 
+    # --- OAuth (optional — disabled if not set) ---
+    MC_OAUTH_GOOGLE_CLIENT_ID: str = ""
+    MC_OAUTH_GOOGLE_CLIENT_SECRET: str = ""
+    MC_OAUTH_GITHUB_CLIENT_ID: str = ""
+    MC_OAUTH_GITHUB_CLIENT_SECRET: str = ""
+    MC_OAUTH_REDIRECT_BASE: str = "http://localhost:8000"
+
     @field_validator("MC_SECRET_KEY")
     @classmethod
     def secret_key_must_be_set(cls, v: str) -> str:

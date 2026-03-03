@@ -8,8 +8,11 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 from uuid import UUID
 
+import secrets
+
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, HTTPException, Header, Query
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +21,7 @@ from core.settings import get_settings
 from db.registry.models import User, Session, Team
 from db.session import get_registry_session
 from services.auth import AuthService
+from services.oauth import GoogleOAuthProvider, GitHubOAuthProvider
 
 logger = structlog.get_logger(__name__)
 router = APIRouter()
@@ -259,3 +263,157 @@ async def logout(
         )
         for s in result.scalars():
             await session.delete(s)
+
+
+# =============================================================================
+# OAuth Helpers
+# =============================================================================
+
+# In-memory state store for OAuth CSRF protection (use Redis in production)
+_oauth_states: dict[str, str] = {}
+
+
+async def _oauth_login_or_create(
+    user_info: dict,
+    session: AsyncSession,
+) -> TokenResponse:
+    """Find or create user from OAuth provider info, return JWT pair."""
+    auth_svc = _get_auth_service()
+
+    # Look up existing user by email
+    result = await session.execute(select(User).where(User.email == user_info["email"]))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        # Create new user from OAuth
+        user = User(
+            email=user_info["email"],
+            display_name=user_info["name"],
+            avatar_url=user_info.get("avatar_url"),
+            auth_provider=user_info["provider"],
+            role="viewer",
+        )
+        session.add(user)
+        await session.flush()
+        await session.refresh(user)
+    else:
+        # Update last login and avatar
+        user.last_login = datetime.now(timezone.utc)
+        if user_info.get("avatar_url"):
+            user.avatar_url = user_info["avatar_url"]
+
+    access_token = auth_svc.create_access_token(
+        user_id=str(user.user_id), role=user.role
+    )
+    refresh_token = auth_svc.create_refresh_token(user_id=str(user.user_id))
+
+    token_hash = hashlib.sha256(refresh_token.encode()).hexdigest()
+    db_session = Session(
+        user_id=user.user_id,
+        token_hash=token_hash,
+        expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+    )
+    session.add(db_session)
+
+    return TokenResponse(access_token=access_token, refresh_token=refresh_token)
+
+
+# =============================================================================
+# Google OAuth
+# =============================================================================
+
+
+@router.get("/oauth/google")
+async def oauth_google_redirect():
+    """Redirect to Google OAuth consent screen."""
+    settings = get_settings()
+    if not settings.MC_OAUTH_GOOGLE_CLIENT_ID:
+        raise HTTPException(status_code=501, detail="Google OAuth not configured")
+
+    provider = GoogleOAuthProvider(
+        client_id=settings.MC_OAUTH_GOOGLE_CLIENT_ID,
+        client_secret=settings.MC_OAUTH_GOOGLE_CLIENT_SECRET,
+        redirect_uri=f"{settings.MC_OAUTH_REDIRECT_BASE}/api/auth/oauth/google/callback",
+    )
+    state = secrets.token_urlsafe(32)
+    _oauth_states[state] = "google"
+    url = provider.get_authorization_url(state=state)
+    return RedirectResponse(url=url)
+
+
+@router.get("/oauth/google/callback")
+async def oauth_google_callback(
+    code: str = Query(...),
+    state: str = Query(...),
+    session: AsyncSession = Depends(get_registry_session),
+):
+    """Handle Google OAuth callback — exchange code, login/create user."""
+    if _oauth_states.pop(state, None) != "google":
+        raise HTTPException(status_code=400, detail="Invalid OAuth state")
+
+    settings = get_settings()
+    provider = GoogleOAuthProvider(
+        client_id=settings.MC_OAUTH_GOOGLE_CLIENT_ID,
+        client_secret=settings.MC_OAUTH_GOOGLE_CLIENT_SECRET,
+        redirect_uri=f"{settings.MC_OAUTH_REDIRECT_BASE}/api/auth/oauth/google/callback",
+    )
+
+    user_info = await provider.exchange_code(code)
+    tokens = await _oauth_login_or_create(user_info, session)
+
+    # Redirect to frontend with tokens as query params
+    return RedirectResponse(
+        url=f"http://localhost:{settings.MC_UI_PORT}"
+        f"/auth/callback?access_token={tokens.access_token}"
+        f"&refresh_token={tokens.refresh_token}"
+    )
+
+
+# =============================================================================
+# GitHub OAuth
+# =============================================================================
+
+
+@router.get("/oauth/github")
+async def oauth_github_redirect():
+    """Redirect to GitHub OAuth consent screen."""
+    settings = get_settings()
+    if not settings.MC_OAUTH_GITHUB_CLIENT_ID:
+        raise HTTPException(status_code=501, detail="GitHub OAuth not configured")
+
+    provider = GitHubOAuthProvider(
+        client_id=settings.MC_OAUTH_GITHUB_CLIENT_ID,
+        client_secret=settings.MC_OAUTH_GITHUB_CLIENT_SECRET,
+        redirect_uri=f"{settings.MC_OAUTH_REDIRECT_BASE}/api/auth/oauth/github/callback",
+    )
+    state = secrets.token_urlsafe(32)
+    _oauth_states[state] = "github"
+    url = provider.get_authorization_url(state=state)
+    return RedirectResponse(url=url)
+
+
+@router.get("/oauth/github/callback")
+async def oauth_github_callback(
+    code: str = Query(...),
+    state: str = Query(...),
+    session: AsyncSession = Depends(get_registry_session),
+):
+    """Handle GitHub OAuth callback — exchange code, login/create user."""
+    if _oauth_states.pop(state, None) != "github":
+        raise HTTPException(status_code=400, detail="Invalid OAuth state")
+
+    settings = get_settings()
+    provider = GitHubOAuthProvider(
+        client_id=settings.MC_OAUTH_GITHUB_CLIENT_ID,
+        client_secret=settings.MC_OAUTH_GITHUB_CLIENT_SECRET,
+        redirect_uri=f"{settings.MC_OAUTH_REDIRECT_BASE}/api/auth/oauth/github/callback",
+    )
+
+    user_info = await provider.exchange_code(code)
+    tokens = await _oauth_login_or_create(user_info, session)
+
+    return RedirectResponse(
+        url=f"http://localhost:{settings.MC_UI_PORT}"
+        f"/auth/callback?access_token={tokens.access_token}"
+        f"&refresh_token={tokens.refresh_token}"
+    )

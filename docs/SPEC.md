@@ -1,8 +1,8 @@
 # Mission Control — Infrastructure Specification
-**Version:** 2.1.0
+**Version:** 2.2.0
 **Project:** Cinema Robot Digital Twin
-**Date:** 2026-03-01
-**Status:** Active — v1 in development. Both databases live, all API routers implemented.
+**Date:** 2026-03-03
+**Status:** Active — v1 in development. Monorepo (web/desktop/ios/core), 22 registry tables, 17 API routers, auth system live, OSMO deployed.
 
 ---
 
@@ -18,12 +18,13 @@
 8. [Claude Code Orchestration Rules](#8-claude-code-orchestration-rules)
 9. [Infrastructure Build Processes](#9-infrastructure-build-processes)
 10. [Workflow Builder](#10-workflow-builder)
-11. [Web UI — Custom Full-Stack](#11-web-ui--custom-full-stack)
+11. [Web UI — Multi-Platform](#11-web-ui--multi-platform)
 12. [ROS2 Visualization Layer](#12-ros2-visualization-layer)
 13. [Isaac Stack Management](#13-isaac-stack-management)
+13b. [OSMO Workflow Orchestration](#13b-osmo-workflow-orchestration)
 14. [File & Config Registry](#14-file--config-registry)
 15. [Repo Structure](#15-repo-structure)
-16. [Open Decisions](#16-open-decisions)
+16. [Resolved Decisions](#16-resolved-decisions)
 17. [Glossary](#17-glossary)
 
 ---
@@ -57,6 +58,9 @@ These two functions share one UI, one database, one auth system, and one backend
 | Workflow Builder | Node-based visual composer for training and automation workflows |
 | Compute Monitoring | GPU, CPU, memory, disk across all machines |
 | Agent Monitoring | Status, logs, success/failure of all Claude Code sub-agents |
+| OSMO Workflow Orchestration | Submit and monitor k8s-native workflows via OSMO v6.0 |
+| Multi-platform Clients | Web, desktop (Electron), iOS (SwiftUI) — shared core |
+| Auth & Teams | JWT auth, OAuth (Google/GitHub), team-based access control |
 
 ### Out of Scope — v1 (Future)
 
@@ -250,18 +254,19 @@ sensor_specs         — sensor hardware specs (type, model, mount offset, intri
 - Never duplicated, never estimated — empirical values only
 - Alembic migrations: `database/empirical/` (separate from registry)
 
-### DB 2 — Mission Control Registry (live — 15 tables)
+### DB 2 — Mission Control Registry (live — 22 tables)
 
-Tracks all artifacts, builds, sessions, and workflow state.
+Tracks all artifacts, builds, sessions, auth, and workflow state. Alembic migrations: `database/registry/` (0001–0007).
 
 **Tables:**
 
 ```
+# Core registry (0001–0002)
 file_registry        — versioned config files with status lifecycle (draft→validated→promoted→deprecated)
 robots               — robot inventory, links to empirical DB by robot_id
 urdf_registry        — canonical URDF versions per robot, build history, status
 usd_registry         — USD assets, conversion history
-scene_registry       — scene/environment definitions and USD stage paths
+scene_registry       — scene/environment definitions and USD stage paths (+ scene_json column, 0003)
 sensor_configs       — ZED X configs per robot/setup combination
 launch_templates     — launch file templates per pipeline configuration
 ros2_param_snapshots — parameter state captured per session
@@ -272,6 +277,23 @@ workflow_runs        — execution history per workflow graph
 workflow_run_logs    — per-node execution log within a workflow run
 dataset_registry     — training datasets, source bags, curation state
 compute_snapshots    — periodic GPU/CPU/RAM/disk readings per machine
+
+# Auth system (0004)
+users                — user accounts (email, password_hash, role, auth_provider, team_id)
+teams                — team/org groupings
+sessions             — JWT refresh token sessions (token_hash, expires_at)
+
+# Data management (0005)
+recordings           — bag/MCAP recording metadata (device, topics, storage, status, tags)
+cloud_objects        — S3/object storage references (bucket, key, content_type, status)
+
+# Layout persistence (0006)
+layouts              — saved panel layout configurations per user
+
+# Robot Builder (0007)
+component_registry   — hardware components with physics, interfaces, mesh variants, approval status
+configuration_packages — component groups (payload, sensor) with tree_json and total_mass
+robot_configurations — per-robot configs linking base_type + payload + sensor packages
 ```
 
 ### Access Control
@@ -296,10 +318,24 @@ Claude Code agents handle **infrastructure administration only**. They do not ex
 ```
 Claude Code (Orchestrator)
 │
-├── MCP Agents (always try first)
-│   ├── DB Agent          — empirical DB queries, registry writes
-│   ├── File Agent        — config generation, validation, registry
-│   └── Container Agent   — Docker lifecycle management
+├── MCP Agent Stack (agent-stack MCP server — 12 tools)
+│   │
+│   ├── Code-gen agents (no tools, function_calling=False — return raw text)
+│   │   ├── develop    — qwen2.5-coder:32b on DGX Spark
+│   │   ├── research   — qwen2.5:72b on DGX Spark
+│   │   ├── cosmos     — qwen2.5:72b on DGX Spark (planning only)
+│   │   └── groot      — qwen2.5:72b on DGX Spark (setup only)
+│   │
+│   ├── Ops agents (with tools — shell, docker, nvidia-smi, etc.)
+│   │   ├── sysadmin   — qwen2.5:72b on DGX Spark
+│   │   ├── simulate   — qwen2.5:72b on DGX Spark
+│   │   ├── monitor    — qwen2.5:7b on localhost
+│   │   └── fleet      — qwen2.5:7b on localhost
+│   │
+│   └── Orchestrator tools
+│       ├── trigger    — send task to autonomous agent team
+│       ├── status     — event queue and active agents
+│       └── events     — recent orchestrator events
 │
 └── Autogen Agents (fallback — when no MCP agent covers the task)
     ├── URDF Build Agent
@@ -310,6 +346,15 @@ Claude Code (Orchestrator)
     ├── cuRobo Config Agent
     └── Audit Agent
 ```
+
+### Fleet
+
+| Machine | Hostname | GPU | Role |
+|---|---|---|---|
+| workstation | localhost | RTX 4070 Super | Primary dev, Isaac Sim, k3s |
+| dgx-spark | spark-2b53.local | 128GB unified | Ollama (72b/32b models) |
+| agx-thor | thor.tailcc41cb.ts.net | Jetson Thor | Edge compute (SSH pending) |
+| orin-nano | alpha-orin-nano | Jetson Orin Nano | Edge compute (Tailscale pending) |
 
 ### Agent Definitions
 
@@ -678,59 +723,86 @@ nodes:
 
 ---
 
-## 11. Web UI — Custom Full-Stack
+## 11. Web UI — Multi-Platform
 
-### Stack
+### Monorepo Structure
 
-| Layer | Technology | Reason |
+```
+packages/
+├── web/       @mission-control/web      — React 18 web app (Vite 5)
+├── core/      @mission-control/core     — shared platform-agnostic logic
+├── desktop/   @mission-control/desktop  — Electron desktop app
+└── ios/       @mission-control/ios      — SwiftUI iOS app (WKWebView)
+```
+
+Managed by pnpm workspaces. `packages/core/` exports shared Zustand stores, roslib types, and platform-agnostic utilities consumed by all clients.
+
+### Web Stack
+
+| Layer | Technology | Version |
 |---|---|---|
-| Frontend | React + TypeScript | Best ecosystem for 3D/viz libraries, component architecture |
-| 3D Rendering | Three.js | WebGL renderer for robot model, point clouds, scene viewer |
-| State management | Zustand | Lightweight, no Redux boilerplate |
-| WebSocket client | roslibjs | Standard ROS2 WebSocket client protocol |
-| Graph editor | React Flow | Node-based workflow builder canvas |
-| Charts / time series | Recharts or uPlot | High-frequency live data plots |
-| Backend | FastAPI (Python) | Async, fast, strong typing, easy ROS2 integration |
-| DB ORM | SQLAlchemy + Alembic | Migrations, type safety |
-| ROS2 bridge | rosbridge_suite (in container) | WebSocket exposure of all ROS2 primitives |
+| Framework | React + TypeScript | 18.3 / 5.6 |
+| Bundler | Vite | 5.4 |
+| 3D Rendering | Three.js | 0.170 |
+| State management | Zustand | 5.0 |
+| Graph editor | React Flow | 11.11 |
+| Charts / time series | uPlot + Recharts | 1.6 / 2.13 |
+| ROS2 WebSocket | roslib v2 | 2.0 (named imports) |
+| CSS | Tailwind CSS | 3.4 |
+| Layout system | react-mosaic-component | 6.1 |
+| MCAP playback | @mcap/core | 2.2 |
+| Backend | FastAPI (Python) | async |
+| DB ORM | SQLAlchemy + Alembic | async engine |
+
+### Theme
+Warm amber accent (#ffaa00) on dark base (#0a0a0a). Not the old DaVinci Resolve blue.
+
+### DataSource Abstraction
+
+All panels consume data through a DataSource interface that decouples UI from transport:
+
+```
+DataSourceProvider (React Context)
+├── LiveDataSource — wraps rosbridge (ros/connection.ts + topicPoller.ts)
+└── McapDataSource — MCAP file reader with playback (50ms tick, variable speed, looping)
+
+Consumer hooks (panel-agnostic):
+  useDataSource()         — get active source
+  useConnectionStatus()   — reactive status
+  useTopics()             — available topics
+  useSubscription(topic)  — latest message on topic
+  usePlaybackControls()   — MCAP playback (undefined for live)
+```
+
+### Pages (10)
+
+Overview, 3D Viewer, ROS Graph, Action Graph, Robots (4 sub-tabs), Fleet, Agents, Infra, Registry, Workflows
+
+### Display Plugins (12)
+
+Grid, Axes, TF, Marker, MarkerArray, RobotModel, PointCloud2, LaserScan, Image, Pose, Path, OccupancyGrid
+
+### Desktop App (Electron)
+
+- BrowserWindow with dark theme (#0a0a0a), macOS hidden title bar
+- Dev: loads from Vite dev server (localhost:3000); Prod: bundled web from extraResources
+- IPC: auth (Keychain token storage), file dialogs (MCAP/config), auto-updater, Tailscale status
+- Build: `tsc` → `electron-builder` (AppImage/deb/dmg/nsis)
+
+### Auth System
+
+- JWT (HS256) + bcrypt password hashing
+- Local registration + login, Google OAuth, GitHub OAuth
+- 15-min access tokens, 7-day refresh tokens with DB session tracking
+- Admin seeding via `scripts/seed_admin.py`
+
+### API Routers (17)
+
+auth, users, ros2, isaac, containers, registry, builds, workflows, agents, compute, empirical, pipelines, recordings, cloud, layouts, components, osmo
 
 ### UI Layout
 
-```
-┌──────────────────────────────────────────────────────────────────┐
-│  MISSION CONTROL          [Robot: arm_001] [Session: 2026-03-01] │
-├──────────┬───────────────────────────────────────────────────────┤
-│          │                                                        │
-│  NAV     │  MAIN CONTENT AREA (panel-based, resizable)           │
-│          │                                                        │
-│ Dashboard│                                                        │
-│ ──────── │                                                        │
-│ ROS2 ▼   │                                                        │
-│  Topics  │                                                        │
-│  TF Tree │                                                        │
-│  3D View │                                                        │
-│  Images  │                                                        │
-│  Bags    │                                                        │
-│  Nodes   │                                                        │
-│  Params  │                                                        │
-│  Logs    │                                                        │
-│ ──────── │                                                        │
-│ Isaac ▼  │                                                        │
-│  Sim     │                                                        │
-│  Lab     │                                                        │
-│  ROS     │                                                        │
-│ ──────── │                                                        │
-│ Workflows│                                                        │
-│ Registry │                                                        │
-│ Builds   │                                                        │
-│ Agents   │                                                        │
-│ Compute  │                                                        │
-│ Admin    │                                                        │
-│          │                                                        │
-└──────────┴───────────────────────────────────────────────────────┘
-```
-
-Panels are resizable, dockable, and saveable as layouts. Operators can create custom layouts (e.g. "recording layout", "monitoring layout", "training layout") and switch between them.
+Panels are resizable, dockable via react-mosaic, and saveable as named layouts (persisted to `layouts` table). Operators can create custom layouts (e.g. "recording layout", "monitoring layout") and switch between them. Sidebar navigation with collapsible sections.
 
 ---
 
@@ -820,6 +892,37 @@ All ROS2 communication flows through rosbridge WebSocket running inside the Isaa
 
 ---
 
+## 13b. OSMO Workflow Orchestration
+
+OSMO v6.0.0 provides Kubernetes-native workflow orchestration for GPU-intensive compute jobs (training, simulation, data processing).
+
+### Deployment
+- **k3s v1.34.4** single-node cluster on workstation (hostname `sim1`)
+- **NVIDIA GPU Operator** via Helm — RTX 4070 Super exposed as `nvidia.com/gpu: 1`
+- **OSMO v6.0.0** — 13 pods, pool ONLINE, 1 GPU allocated
+- CLI: `/usr/local/bin/osmo` (v6.0.0)
+
+### Integration with Mission Control
+- Backend service: `backend/services/osmo.py` — submits workflows to OSMO API
+- API router: `backend/api/osmo.py` — `/api/osmo/` endpoints
+- Workflow Builder `osmo.*` nodes can dispatch compute jobs to the k3s cluster
+- Future: expand cluster to DGX Spark for multi-node GPU scheduling
+
+### Architecture
+```
+Mission Control Backend
+    │
+    ▼ (OSMO API)
+k3s cluster (workstation)
+    │
+    ├── OSMO controller pods (13)
+    ├── GPU Operator (nvidia.com/gpu scheduling)
+    └── Worker pods (launched per workflow)
+        └── Access to: Isaac Sim, Isaac Lab, cuRobo, training scripts
+```
+
+---
+
 ## 14. File & Config Registry
 
 All generated files are versioned, hashed, and registered before use. No file enters an active pipeline without a registry entry.
@@ -881,14 +984,48 @@ mission-control/
 ├── .env.machines.example            # Template — copy to .env.machines, gitignore actual
 ├── .env.machines                    # Gitignored — machine-specific addresses + paths
 ├── docker-compose.yml               # Isaac ROS containers + rosbridge
-├── README.md
+├── pnpm-workspace.yaml              # Monorepo workspace config
+├── package.json                     # Root scripts (dev, build, typecheck, lint)
 │
 ├── docs/
 │   ├── SPEC.md                      # This document
-│   ├── AGENT_PROMPTS.md             # Per-agent system prompts (generated next)
-│   ├── CLAUDE.md                    # Claude Code orchestration rules (generated next)
-│   ├── DATA_INTEGRITY.md            # NULL policy reference card
-│   └── WORKFLOW_NODES.md            # Full node catalog with params
+│   ├── plans/                       # Design docs and implementation plans
+│   └── research/                    # Stack research reports
+│
+├── packages/
+│   ├── web/                         # @mission-control/web — React 18 + Vite 5
+│   │   ├── src/
+│   │   │   ├── App.tsx
+│   │   │   ├── data-source/         # DataSource abstraction (Live + MCAP)
+│   │   │   ├── displays/            # 12 Three.js display plugins
+│   │   │   ├── layouts/             # Default panel layouts
+│   │   │   ├── message-path/        # Message path parser and evaluator
+│   │   │   ├── pages/               # 10 page components
+│   │   │   ├── panels/              # 30+ panel components
+│   │   │   │   └── robots/          # 4 robot sub-tab panels
+│   │   │   ├── ros/                 # rosbridge connection, topicPoller, tfTree
+│   │   │   ├── stores/              # Zustand stores (15+)
+│   │   │   ├── components/
+│   │   │   │   └── pipeline/        # Workflow/scene builder components
+│   │   │   ├── hooks/
+│   │   │   ├── services/            # API client
+│   │   │   └── theme/               # Tailwind CSS + mosaic overrides
+│   │   ├── public/
+│   │   │   └── nvidia-assets.json   # NVIDIA asset catalog for scene generation
+│   │   ├── vite.config.ts
+│   │   └── package.json
+│   │
+│   ├── core/                        # @mission-control/core — shared logic
+│   │   └── src/                     # Zustand stores, roslib types, platform utils
+│   │
+│   ├── desktop/                     # @mission-control/desktop — Electron
+│   │   ├── main/                    # main.ts, fileAccess, secureStorage, autoUpdate, tailscale
+│   │   ├── preload/                 # Context-isolated IPC bridge
+│   │   ├── electron-builder.yml
+│   │   ├── tsconfig.json
+│   │   └── package.json
+│   │
+│   └── ios/                         # SwiftUI + WKWebView skeleton
 │
 ├── orchestrator/                    # Claude Code domain
 │   ├── CLAUDE.md                    # Symlink to docs/CLAUDE.md
@@ -913,7 +1050,9 @@ mission-control/
 │
 ├── backend/                         # FastAPI application
 │   ├── main.py
-│   ├── api/                            # All 8 routers live — no stubs
+│   ├── api/                            # 17 routers — all live
+│   │   ├── auth.py                  # Register, login, refresh, logout, OAuth (Google/GitHub)
+│   │   ├── users.py                 # User CRUD, team management
 │   │   ├── registry.py              # File registry CRUD, robot registration, scenes
 │   │   ├── builds.py                # Build log CRUD, per-build file listing
 │   │   ├── agents.py                # Agent logs (paginated), summary (GROUP BY)
@@ -921,7 +1060,14 @@ mission-control/
 │   │   ├── compute.py               # Compute snapshots (list, latest/host, create)
 │   │   ├── containers.py            # Docker SDK status check, graceful fallback
 │   │   ├── ros2.py                  # Topics/nodes via rosbridge, connection status
-│   │   └── isaac.py                 # Isaac Sim status (static — requires container)
+│   │   ├── isaac.py                 # Isaac Sim status (static — requires container)
+│   │   ├── empirical.py             # Empirical DB read-only access
+│   │   ├── pipelines.py             # Pipeline management
+│   │   ├── recordings.py            # Recording lifecycle (start, stop, browse)
+│   │   ├── cloud.py                 # S3/cloud object management
+│   │   ├── layouts.py               # Saved panel layout CRUD
+│   │   ├── components.py            # Robot Builder component registry
+│   │   └── osmo.py                  # OSMO workflow orchestration
 │   ├── rosbridge/
 │   │   ├── client.py                # Persistent rosbridge WebSocket client
 │   │   ├── topic_monitor.py
@@ -946,51 +1092,17 @@ mission-control/
 │   │   ├── empirical/
 │   │   │   └── models.py            # EmpiricalBase + 6 models (Robot, JointSpec, LinkSpec, etc.)
 │   │   └── registry/
-│   │       └── models.py            # Base + 15 models (FileRegistry, BuildLog, AgentLog, etc.)
+│   │       └── models.py            # Base + 22 models (auth, registry, recordings, robot builder)
 │   └── services/
+│       ├── auth.py                  # JWT + bcrypt AuthService
+│       ├── oauth.py                 # Google + GitHub OAuth providers
+│       ├── llm_client.py            # Scene generation via Ollama (qwen2.5:72b)
+│       ├── osmo.py                  # OSMO workflow submission client
 │       ├── isaac_sim.py             # Isaac Sim process management
 │       ├── isaac_lab.py             # Isaac Lab run management
 │       └── compute_monitor.py       # GPU/CPU polling
 │
-├── frontend/                        # React + TypeScript application
-│   ├── src/
-│   │   ├── App.tsx
-│   │   ├── layouts/                 # Saveable panel layouts
-│   │   ├── pages/
-│   │   │   ├── Dashboard/
-│   │   │   ├── ROS2/
-│   │   │   │   ├── TopicMonitor/
-│   │   │   │   ├── TFTree/
-│   │   │   │   ├── Viewer3D/        # Three.js robot + scene viewer
-│   │   │   │   ├── ImageViewer/
-│   │   │   │   ├── PointCloud/
-│   │   │   │   ├── NodeGraph/
-│   │   │   │   ├── BagManager/
-│   │   │   │   ├── Parameters/
-│   │   │   │   ├── Services/
-│   │   │   │   └── LogViewer/
-│   │   │   ├── Isaac/
-│   │   │   │   ├── SimControl/
-│   │   │   │   └── LabMonitor/
-│   │   │   ├── Workflows/
-│   │   │   │   ├── Builder/         # React Flow node canvas
-│   │   │   │   ├── Library/         # Saved workflow graphs
-│   │   │   │   └── Runs/            # Execution history
-│   │   │   ├── Registry/
-│   │   │   ├── Builds/
-│   │   │   ├── Agents/
-│   │   │   ├── Compute/
-│   │   │   └── Admin/
-│   │   ├── components/
-│   │   │   ├── WorkflowNodes/       # React Flow custom node components
-│   │   │   ├── ThreeViewer/         # Three.js scene wrapper
-│   │   │   └── shared/
-│   │   ├── hooks/
-│   │   │   ├── useRosBridge.ts      # rosbridge WebSocket hook
-│   │   │   ├── useTopic.ts
-│   │   │   └── useTF.ts
-│   │   └── store/                   # Zustand stores
-│
+│   # (frontend moved to packages/web/ — see packages/ above)
 ├── registry/                        # File storage (managed by File Agent)
 │   ├── urdf/
 │   ├── usd/
@@ -1013,13 +1125,18 @@ mission-control/
 │   │   ├── seed_cr10.py             # Idempotent CR10 seed (parses URDF + collision YAML)
 │   │   └── versions/
 │   │       └── 0001_initial_schema.py  # 6 tables
-│   └── registry/                    # Registry DB Alembic migrations
+│   └── registry/                    # Registry DB Alembic migrations (at 0007/head)
 │       ├── alembic.ini
 │       ├── env.py
 │       ├── script.py.mako
 │       └── versions/
-│           ├── 0001_initial_schema.py  # 10 tables
-│           └── 0002_add_remaining_tables.py  # 5 tables
+│           ├── 0001_initial_schema.py       # 10 tables
+│           ├── 0002_add_remaining_tables.py # 5 tables
+│           ├── 0003_scene_json_column.py    # scene_json on scene_registry
+│           ├── 0004_auth_tables.py          # users, teams, sessions
+│           ├── 0005_recordings_and_cloud_objects.py
+│           ├── 0006_layouts_table.py
+│           └── 0007_robot_builder_tables.py # component_registry, config packages, robot configs
 │
 ├── workflows/                       # Saved workflow YAML exports (Git-versioned)
 │   └── examples/
@@ -1108,5 +1225,5 @@ All `lab.*` Workflow Builder nodes are v1 deliverables. Nothing is stubbed.
 
 ---
 
-*Spec v2.1.0 — 2026-03-01*
-*Both databases live (empirical: 6 tables + CR10 seed, registry: 15 tables). All 8 API routers implemented. Next deliverable: frontend pages for new API routes.*
+*Spec v2.2.0 — 2026-03-03*
+*Both databases live (empirical: 6 tables + CR10 seed, registry: 22 tables at migration 0007). 17 API routers. Monorepo: packages/web + core + desktop + ios. Auth system (JWT + OAuth). OSMO v6.0 deployed on k3s. Cinema motion pipeline foundation complete.*

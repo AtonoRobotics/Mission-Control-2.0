@@ -654,9 +654,9 @@ function IsaacPipelineTab() {
   useEffect(() => {
     if (!selectedRobotId) return;
     setBuildsLoading(true);
-    fetch(`/mc/api/builds?robot_id=${selectedRobotId}&limit=10`)
-      .then((r) => r.ok ? r.json() : { builds: [] })
-      .then((data) => setBuilds(data.builds ?? []))
+    api.get('/builds', { params: { robot_id: selectedRobotId, limit: 10 } })
+      .then(({ data }) => setBuilds(data.builds ?? []))
+      .catch(() => setBuilds([]))
       .finally(() => setBuildsLoading(false));
   }, [selectedRobotId]);
 

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import api from '@/services/api';
 
 export interface TreeNode {
   node_id: string;
@@ -54,9 +55,8 @@ export const useBuilderStore = create<BuilderState>()((set) => ({
 
   fetchConfigs: async (robotId) => {
     try {
-      const res = await fetch(`/mc/api/robots/${robotId}/configurations`);
-      if (!res.ok) throw new Error(await res.text());
-      set({ configs: await res.json() });
+      const { data } = await api.get(`/robots/${robotId}/configurations`);
+      set({ configs: data });
     } catch (e) {
       set({ error: (e as Error).message });
     }
@@ -64,13 +64,7 @@ export const useBuilderStore = create<BuilderState>()((set) => ({
 
   createConfig: async (robotId, name) => {
     try {
-      const res = await fetch(`/mc/api/robots/${robotId}/configurations`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      const config = await res.json();
+      const { data: config } = await api.post(`/robots/${robotId}/configurations`, { name });
       set((s) => ({ configs: [...s.configs, config] }));
     } catch (e) {
       set({ error: (e as Error).message });
@@ -92,11 +86,7 @@ export const useBuilderStore = create<BuilderState>()((set) => ({
   build: async (configId) => {
     set({ building: true, buildResult: null, error: null });
     try {
-      const res = await fetch(`/mc/api/configurations/${configId}/build`, {
-        method: 'POST',
-      });
-      if (!res.ok) throw new Error(await res.text());
-      const result = await res.json();
+      const { data: result } = await api.post(`/configurations/${configId}/build`);
       set({ buildResult: result, building: false });
     } catch (e) {
       set({

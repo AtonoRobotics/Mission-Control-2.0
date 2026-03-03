@@ -97,10 +97,8 @@ export default function McapBrowserPanel(_props: any) {
   const handleDelete = useCallback(
     async (id: string) => {
       try {
-        const resp = await fetch(`/api/recordings/${id}`, { method: 'DELETE' });
-        if (resp.ok) {
-          setRecordings((prev) => prev.filter((r) => r.recording_id !== id));
-        }
+        await api.delete(`/recordings/${id}`);
+        setRecordings((prev) => prev.filter((r) => r.recording_id !== id));
       } catch (e) {
         console.error('Failed to delete recording:', e);
       }
@@ -110,10 +108,8 @@ export default function McapBrowserPanel(_props: any) {
 
   const handleShare = useCallback(async (id: string) => {
     try {
-      const resp = await fetch(`/mc/api/recordings/${id}/share`, { method: 'POST' });
-      if (resp.ok) {
-        setRecordings((prev) => prev.map((r) => (r.recording_id === id ? { ...r, shared: true } : r)));
-      }
+      await api.post(`/recordings/${id}/share`);
+      setRecordings((prev) => prev.map((r) => (r.recording_id === id ? { ...r, shared: true } : r)));
     } catch (e) {
       console.error('Failed to share recording:', e);
     }

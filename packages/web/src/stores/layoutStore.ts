@@ -227,9 +227,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
   loadLayoutFromServer: async (layoutId) => {
     set({ syncing: true, lastSyncError: null });
     try {
-      const resp = await fetch(`/mc/api/layouts/${layoutId}`);
-      if (!resp.ok) throw new Error(`Load failed: ${resp.status}`);
-      const data = await resp.json();
+      const { data } = await api.get(`/layouts/${layoutId}`);
       set({
         layout: data.layout_json.layout,
         panelConfigs: data.layout_json.panelConfigs ?? {},
@@ -244,8 +242,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
   deleteLayoutFromServer: async (layoutId) => {
     set({ syncing: true, lastSyncError: null });
     try {
-      const resp = await fetch(`/mc/api/layouts/${layoutId}`, { method: 'DELETE' });
-      if (!resp.ok) throw new Error(`Delete failed: ${resp.status}`);
+      await api.delete(`/layouts/${layoutId}`);
       const state = get();
       set({
         savedLayouts: state.savedLayouts.filter((l) => l.id !== layoutId),
@@ -261,12 +258,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
     const { layout, panelConfigs } = get();
     set({ syncing: true, lastSyncError: null });
     try {
-      const resp = await fetch(`/mc/api/layouts/${layoutId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ layout_json: { layout, panelConfigs } }),
-      });
-      if (!resp.ok) throw new Error(`Update failed: ${resp.status}`);
+      await api.patch(`/layouts/${layoutId}`, { layout_json: { layout, panelConfigs } });
       set({ syncing: false });
     } catch (e) {
       set({ syncing: false, lastSyncError: (e as Error).message });

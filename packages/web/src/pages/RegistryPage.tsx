@@ -225,12 +225,7 @@ function FilesTab() {
   const handlePromote = async (id: string) => {
     setPromoting((prev) => new Set(prev).add(id));
     try {
-      const res = await fetch(`/mc/api/registry/files/${id}/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'promoted' }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await api.patch(`/registry/files/${id}/status`, { status: 'promoted' });
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Promote failed');

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import api from '@/services/api';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -219,9 +220,7 @@ export default function FleetPage() {
 
   async function fetchFleet() {
     try {
-      const res = await fetch('/api/fleet');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
+      const { data } = await api.get('/fleet');
       setMachines(data.machines ?? []);
       setLastUpdated(new Date());
       setError(null);

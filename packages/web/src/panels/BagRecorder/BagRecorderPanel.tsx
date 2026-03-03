@@ -5,6 +5,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useTopics } from '@/data-source/hooks';
+import api from '@/services/api';
 
 const inputStyle: React.CSSProperties = {
   background: 'var(--bg-surface-2)',
@@ -64,17 +65,11 @@ export default function BagRecorderPanel(_props: any) {
         const t = topics.find((x) => x.name === name);
         return { name, type: t?.schemaName ?? 'unknown' };
       });
-      const resp = await fetch('/api/recordings/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ device_name: deviceName, topics: topicList }),
-      });
-      if (resp.ok) {
-        setIsRecording(true);
-        setDuration(0);
-        setMessageCount(0);
-        setFileSize(0);
-      }
+      await api.post('/recordings/start', { device_name: deviceName, topics: topicList });
+      setIsRecording(true);
+      setDuration(0);
+      setMessageCount(0);
+      setFileSize(0);
     } catch (e) {
       console.error('Failed to start recording:', e);
     }
@@ -82,7 +77,7 @@ export default function BagRecorderPanel(_props: any) {
 
   const stopRecording = useCallback(async () => {
     try {
-      await fetch('/api/recordings/stop', { method: 'POST' });
+      await api.post('/recordings/stop');
       setIsRecording(false);
     } catch (e) {
       console.error('Failed to stop recording:', e);
@@ -94,12 +89,9 @@ export default function BagRecorderPanel(_props: any) {
     if (!isRecording) return;
     pollRef.current = setInterval(async () => {
       try {
-        const resp = await fetch('/api/recordings/status/active');
-        if (resp.ok) {
-          const data = await resp.json();
-          setDuration(data.duration_sec ?? 0);
-          setMessageCount(data.message_count ?? 0);
-        }
+        const { data } = await api.get('/recordings/status/active');
+        setDuration(data.duration_sec ?? 0);
+        setMessageCount(data.message_count ?? 0);
       } catch { /* ignore */ }
     }, 1000);
     return () => {

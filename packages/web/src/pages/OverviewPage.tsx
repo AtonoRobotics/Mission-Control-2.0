@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import api from '@/services/api';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -285,9 +286,7 @@ export default function OverviewPage() {
   async function fetchAll() {
     // Summary
     try {
-      const res = await fetch('/api/summary');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
+      const { data } = await api.get('/summary');
       setSummary(data);
       setSummaryErr(null);
     } catch {
@@ -296,9 +295,7 @@ export default function OverviewPage() {
 
     // Fleet
     try {
-      const res = await fetch('/api/fleet');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
+      const { data } = await api.get('/fleet');
       setMachines(data.machines ?? []);
       setFleetErr(null);
     } catch {
@@ -307,9 +304,7 @@ export default function OverviewPage() {
 
     // Tasks
     try {
-      const res = await fetch('/api/agents');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
+      const { data } = await api.get('/agents');
       setTasks(data.tasks ?? []);
       setTasksErr(null);
     } catch {

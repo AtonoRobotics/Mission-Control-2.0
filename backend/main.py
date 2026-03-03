@@ -19,7 +19,7 @@ from core.settings import get_settings
 from core.integrity import run_startup_integrity_check, has_critical_failures
 from db.session import init_engines, dispose_engines, get_registry_engine, get_empirical_engine
 from rosbridge.client import RosBridgeClient
-from api import ros2, isaac, containers, registry, builds, workflows, agents, compute, empirical, pipelines
+from api import auth, ros2, isaac, containers, registry, builds, workflows, agents, compute, empirical, pipelines
 
 logger = structlog.get_logger(__name__)
 settings = get_settings()
@@ -97,6 +97,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
 app.include_router(ros2.router, prefix="/api/ros2", tags=["ROS2"])
 app.include_router(isaac.router, prefix="/api/isaac", tags=["Isaac"])
 app.include_router(containers.router, prefix="/api/containers", tags=["Containers"])

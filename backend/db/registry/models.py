@@ -10,6 +10,7 @@ from datetime import datetime
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    DateTime,
     Float,
     ForeignKey,
     Integer,
@@ -216,8 +217,8 @@ class User(Base):
     team_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("teams.team_id"), nullable=True
     )
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
-    last_login: Mapped[datetime | None] = mapped_column(nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_login: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class Session(Base):
@@ -232,8 +233,8 @@ class Session(Base):
     token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     device: Mapped[str | None] = mapped_column(String(256), nullable=True)
     ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
-    expires_at: Mapped[datetime] = mapped_column(nullable=False)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 # =============================================================================

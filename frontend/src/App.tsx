@@ -52,6 +52,7 @@ import McapBrowserPanel from '@/panels/McapBrowser/McapBrowserPanel';
 import CloudSettingsPanel from '@/panels/CloudSettings/CloudSettingsPanel';
 import TeamSettingsPanel from '@/panels/TeamSettings/TeamSettingsPanel';
 import ProfileSettingsPanel from '@/panels/ProfileSettings/ProfileSettingsPanel';
+import NotificationCenterPanel from '@/panels/NotificationCenter/NotificationCenterPanel';
 
 // Register all panels
 registerPanel({ id: 'viewport3d', title: '3D Viewport', category: '3d-spatial', component: Viewport3D, platforms: ['web', 'desktop'] });
@@ -96,6 +97,7 @@ registerPanel({ id: 'mcap-browser', title: 'MCAP Browser', category: 'recording'
 registerPanel({ id: 'cloud-settings', title: 'Cloud Settings', category: 'infrastructure', component: CloudSettingsPanel, platforms: ['web', 'desktop'] });
 registerPanel({ id: 'team-settings', title: 'Team Settings', category: 'infrastructure', component: TeamSettingsPanel, platforms: ['web', 'desktop'] });
 registerPanel({ id: 'profile-settings', title: 'Profile', category: 'infrastructure', component: ProfileSettingsPanel, platforms: ['web', 'desktop'] });
+registerPanel({ id: 'notifications', title: 'Notifications', category: 'infrastructure', component: NotificationCenterPanel, platforms: ['web', 'desktop', 'ios'] });
 
 // Register all display types
 initDisplays();

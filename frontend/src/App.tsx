@@ -47,6 +47,8 @@ import DataSourceInfoPanel from '@/panels/DataSourceInfo/DataSourceInfoPanel';
 import ActionMonitorPanel from '@/panels/ActionMonitor/ActionMonitorPanel';
 import LatencyMonitorPanel from '@/panels/LatencyMonitor/LatencyMonitorPanel';
 import FrequencyMonitorPanel from '@/panels/FrequencyMonitor/FrequencyMonitorPanel';
+import BagRecorderPanel from '@/panels/BagRecorder/BagRecorderPanel';
+import McapBrowserPanel from '@/panels/McapBrowser/McapBrowserPanel';
 
 // Register all panels
 registerPanel({ id: 'viewport3d', title: '3D Viewport', category: '3d-spatial', component: Viewport3D, platforms: ['web', 'desktop'] });
@@ -86,6 +88,8 @@ registerPanel({ id: 'data-source-info', title: 'Data Source Info', category: 'ut
 registerPanel({ id: 'action-monitor', title: 'Action Monitor', category: 'ros2-inspect', component: ActionMonitorPanel, platforms: ['web', 'desktop'] });
 registerPanel({ id: 'latency-monitor', title: 'Latency Monitor', category: 'diagnostics', component: LatencyMonitorPanel, platforms: ['web', 'desktop'] });
 registerPanel({ id: 'frequency-monitor', title: 'Frequency Monitor', category: 'diagnostics', component: FrequencyMonitorPanel, platforms: ['web', 'desktop', 'ios'] });
+registerPanel({ id: 'bag-recorder', title: 'Bag Recorder', category: 'recording', component: BagRecorderPanel, platforms: ['web', 'desktop'], requiresLiveData: true });
+registerPanel({ id: 'mcap-browser', title: 'MCAP Browser', category: 'recording', component: McapBrowserPanel, platforms: ['web', 'desktop', 'ios'] });
 
 // Register all display types
 initDisplays();

@@ -1,19 +1,19 @@
 import { Mosaic, MosaicWindow, type MosaicBranch } from 'react-mosaic-component';
 import 'react-mosaic-component/react-mosaic-component.css';
-import { useLayoutStore, type PanelId } from '@/stores/layoutStore';
+import { useLayoutStore } from '@/stores/layoutStore';
 import { getPanel } from '@/panels/panelRegistry';
 import { ErrorBoundary } from './ErrorBoundary';
 
 export default function Layout() {
   const { layout, setLayout } = useLayoutStore();
 
-  const renderTile = (id: PanelId, path: MosaicBranch[]) => {
+  const renderTile = (id: string, path: MosaicBranch[]) => {
     const panel = getPanel(id);
     if (!panel) return <div className="p-4 text-sm" style={{ color: 'var(--text-muted)' }}>Unknown panel: {id}</div>;
     const Component = panel.component;
 
     return (
-      <MosaicWindow<PanelId>
+      <MosaicWindow<string>
         path={path}
         title={panel.title}
         toolbarControls={<></>}
@@ -32,7 +32,7 @@ export default function Layout() {
   };
 
   return (
-    <Mosaic<PanelId>
+    <Mosaic<string>
       renderTile={renderTile}
       value={layout}
       onChange={setLayout as any}

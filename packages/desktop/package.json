@@ -2,10 +2,14 @@
   "name": "@mission-control/desktop",
   "version": "0.1.0",
   "private": true,
-  "main": "main/main.ts",
+  "main": "dist-ts/main/main.js",
   "scripts": {
-    "start": "electron .",
-    "dev": "electron . --dev"
+    "dev": "tsc && electron dist-ts/main/main.js --dev",
+    "build:ts": "tsc",
+    "build:web": "pnpm --filter @mission-control/web build",
+    "build": "pnpm build:ts && pnpm build:web && electron-builder --config electron-builder.yml",
+    "build:linux": "pnpm build:ts && pnpm build:web && electron-builder --linux --config electron-builder.yml",
+    "start": "electron dist-ts/main/main.js"
   },
   "dependencies": {
     "@mission-control/core": "workspace:*",

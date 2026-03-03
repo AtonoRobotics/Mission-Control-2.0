@@ -4,8 +4,13 @@ directories:
   output: dist
   buildResources: assets
 files:
-  - main/**/*.js
-  - preload/**/*.js
+  - dist-ts/**/*.js
+  - dist-ts/**/*.js.map
+extraResources:
+  - from: ../web/dist
+    to: web
+    filter:
+      - "**/*"
 mac:
   category: public.app-category.developer-tools
   target:

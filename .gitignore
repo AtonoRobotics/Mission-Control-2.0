@@ -18,9 +18,9 @@ build/
 
 # Frontend
 node_modules/
-frontend/dist/
-frontend/.next/
-frontend/build/
+packages/web/dist/
+packages/web/.next/
+packages/web/build/
 *.tsbuildinfo
 
 # Registry (generated files — managed by File Agent, not Git)

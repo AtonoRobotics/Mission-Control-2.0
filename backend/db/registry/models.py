@@ -427,3 +427,76 @@ class CloudObject(Base):
     )
     status: Mapped[str] = mapped_column(String(32), nullable=False, server_default="uploading")
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
+# =============================================================================
+# 0007 — Robot Builder Tables
+# =============================================================================
+
+
+class ComponentRegistry(Base):
+    __tablename__ = "component_registry"
+
+    component_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    category: Mapped[str] = mapped_column(String(64), nullable=False)
+    manufacturer: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    model: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    physics: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    attachment_interfaces: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    data_sources: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    mesh_variants: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    approval_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default="pending"
+    )
+    approved_by: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
+
+
+class ConfigurationPackage(Base):
+    __tablename__ = "configuration_packages"
+
+    package_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    package_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    component_ids: Mapped[list] = mapped_column(JSONB, nullable=False, server_default="[]")
+    tree_json: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    total_mass_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
+
+
+class RobotConfiguration(Base):
+    __tablename__ = "robot_configurations"
+
+    config_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    robot_id: Mapped[str] = mapped_column(
+        String(128), ForeignKey("robots.robot_id"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    base_type: Mapped[str] = mapped_column(String(32), nullable=False, server_default="fixed")
+    base_config: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    payload_package_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("configuration_packages.package_id"), nullable=True
+    )
+    sensor_package_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("configuration_packages.package_id"), nullable=True
+    )
+    generated_files: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    build_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default="draft"
+    )
+    build_log: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())

@@ -31,7 +31,11 @@ function createWindow() {
     mainWindow.loadURL('http://localhost:3000');
     mainWindow.webContents.openDevTools();
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../../web/dist/index.html'));
+    // In packaged app, web files are in extraResources/web
+    const webPath = app.isPackaged
+      ? path.join(process.resourcesPath, 'web', 'index.html')
+      : path.join(__dirname, '../../web/dist/index.html');
+    mainWindow.loadFile(webPath);
   }
 
   mainWindow.on('closed', () => {

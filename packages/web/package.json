@@ -1,5 +1,5 @@
 {
-  "name": "mission-control-frontend",
+  "name": "@mission-control/web",
   "version": "0.1.0",
   "description": "Mission Control — Cinema Robot Digital Twin Web UI",
   "private": true,

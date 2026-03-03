@@ -34,7 +34,7 @@ def upgrade() -> None:
         sa.Column('storage_type', sa.String(32), nullable=False, server_default='local'),
         sa.Column('status', sa.String(32), nullable=False, server_default='recording'),
         sa.Column('shared', sa.Boolean, server_default='false'),
-        sa.Column('tags', JSONB, server_default="'[]'::jsonb"),
+        sa.Column('tags', JSONB, server_default=sa.text("'[]'::jsonb")),
         sa.Column('created_at', sa.TIMESTAMP(timezone=True), server_default=sa.text('now()')),
         sa.ForeignKeyConstraint(['user_id'], ['users.user_id'], name='fk_recordings_user'),
         sa.ForeignKeyConstraint(['team_id'], ['teams.team_id'], name='fk_recordings_team'),

@@ -67,14 +67,21 @@ export default function McapBrowserPanel(_props: any) {
   const [recordings, setRecordings] = useState<RecordingEntry[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<'all' | 'shared'>('all');
 
   const fetchRecordings = useCallback(async () => {
     setLoading(true);
     try {
-      const resp = await fetch('/api/recordings/');
-      if (resp.ok) {
-        setRecordings(await resp.json());
-      }
+      const [ownResp, sharedResp] = await Promise.all([
+        fetch('/mc/api/recordings/'),
+        fetch('/mc/api/recordings/shared/list'),
+      ]);
+      const own = ownResp.ok ? await ownResp.json() : [];
+      const shared = sharedResp.ok ? await sharedResp.json() : [];
+      // Merge, deduplicate by recording_id
+      const map = new Map<string, RecordingEntry>();
+      for (const r of [...own, ...shared]) map.set(r.recording_id, r);
+      setRecordings(Array.from(map.values()));
     } catch (e) {
       console.error('Failed to fetch recordings:', e);
     } finally {
@@ -100,12 +107,25 @@ export default function McapBrowserPanel(_props: any) {
     [],
   );
 
-  const filtered = recordings.filter(
-    (r) =>
-      !search ||
-      r.device_name.toLowerCase().includes(search.toLowerCase()) ||
-      r.tags.some((t) => t.toLowerCase().includes(search.toLowerCase())),
-  );
+  const handleShare = useCallback(async (id: string) => {
+    try {
+      const resp = await fetch(`/mc/api/recordings/${id}/share`, { method: 'POST' });
+      if (resp.ok) {
+        setRecordings((prev) => prev.map((r) => (r.recording_id === id ? { ...r, shared: true } : r)));
+      }
+    } catch (e) {
+      console.error('Failed to share recording:', e);
+    }
+  }, []);
+
+  const filtered = recordings
+    .filter((r) => filter === 'all' || r.shared)
+    .filter(
+      (r) =>
+        !search ||
+        r.device_name.toLowerCase().includes(search.toLowerCase()) ||
+        r.tags.some((t) => t.toLowerCase().includes(search.toLowerCase())),
+    );
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
@@ -141,8 +161,26 @@ export default function McapBrowserPanel(_props: any) {
         >
           Refresh
         </button>
+        {(['all', 'shared'] as const).map((f) => (
+          <button
+            key={f}
+            onClick={() => setFilter(f)}
+            style={{
+              background: filter === f ? 'var(--accent-dim, rgba(255,170,0,0.15))' : 'none',
+              color: filter === f ? 'var(--accent)' : 'var(--text-tertiary, #666)',
+              border: filter === f ? '1px solid var(--accent)' : '1px solid transparent',
+              borderRadius: 3,
+              fontSize: 10,
+              padding: '2px 8px',
+              cursor: 'pointer',
+              textTransform: 'capitalize',
+            }}
+          >
+            {f}
+          </button>
+        ))}
         <span style={{ fontSize: 10, color: 'var(--text-tertiary, #666)' }}>
-          {recordings.length} recordings
+          {filtered.length} recordings
         </span>
       </div>
 
@@ -232,6 +270,22 @@ export default function McapBrowserPanel(_props: any) {
               >
                 Open
               </button>
+              {!rec.shared && (
+                <button
+                  onClick={() => handleShare(rec.recording_id)}
+                  style={{
+                    background: 'none',
+                    color: '#00cc66',
+                    border: '1px solid #00cc6640',
+                    borderRadius: 3,
+                    fontSize: 10,
+                    padding: '2px 8px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Share
+                </button>
+              )}
               <button
                 onClick={() => handleDelete(rec.recording_id)}
                 style={{

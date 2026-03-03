@@ -85,6 +85,11 @@ async def list_recordings(
     return recs
 
 
+@router.get("/shared/list", response_model=list[RecordingOut])
+async def list_shared_recordings():
+    return [rec for rec in _recordings.values() if rec.get("shared")]
+
+
 @router.get("/{recording_id}", response_model=RecordingOut)
 async def get_recording(recording_id: str):
     if recording_id not in _recordings:
@@ -286,3 +291,15 @@ async def stream_recording(recording_id: str, request: Request):
             "Accept-Ranges": "bytes",
         },
     )
+
+
+# ── Recording sharing ────────────────────────────────────────────────────────
+
+
+@router.post("/{recording_id}/share", response_model=RecordingOut)
+async def share_recording(recording_id: str):
+    if recording_id not in _recordings:
+        raise HTTPException(status_code=404, detail="Recording not found")
+    _recordings[recording_id]["shared"] = True
+    logger.info("recording_shared", recording_id=recording_id)
+    return _recordings[recording_id]

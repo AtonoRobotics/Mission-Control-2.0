@@ -8,26 +8,17 @@ import uPlot from 'uplot';
 import 'uplot/dist/uPlot.min.css';
 import { useTopics, useDataSource } from '@/data-source/hooks';
 import type { MessageEvent } from '@/data-source/types';
+import { resolveField } from '@/message-path';
 
 interface SeriesConfig {
   topic: string;
-  field: string; // dot-path into message, e.g. "linear.x"
+  field: string; // message path syntax, e.g. "position[0].@degrees"
   color: string;
 }
 
 const COLORS = ['#ffaa00', '#4fc3f7', '#81c784', '#e57373', '#ba68c8', '#ffb74d', '#4dd0e1', '#aed581'];
 const MAX_POINTS = 1000;
 const DEFAULT_WINDOW_SEC = 30;
-
-function resolveField(obj: unknown, path: string): number | null {
-  const parts = path.split('.');
-  let cur: unknown = obj;
-  for (const p of parts) {
-    if (cur == null || typeof cur !== 'object') return null;
-    cur = (cur as Record<string, unknown>)[p];
-  }
-  return typeof cur === 'number' ? cur : null;
-}
 
 export default function PlotPanel(props: any) {
   const { config = {}, onConfigChange = () => {} } = props;
@@ -108,7 +99,8 @@ export default function PlotPanel(props: any) {
 
     seriesList.forEach((seriesCfg, idx) => {
       const sub = ds.subscribe(seriesCfg.topic, (event: MessageEvent) => {
-        const val = resolveField(event.message, seriesCfg.field);
+        const resolved = resolveField(event.message, seriesCfg.field);
+        const val = typeof resolved === 'number' ? resolved : null;
         if (val === null) return;
 
         const data = dataRef.current;
@@ -224,7 +216,7 @@ export default function PlotPanel(props: any) {
           type="text"
           value={newField}
           onChange={(e) => setNewField(e.target.value)}
-          placeholder="field.path"
+          placeholder="position[0]"
           style={{
             background: 'var(--bg-surface-2)',
             color: 'var(--text-primary)',

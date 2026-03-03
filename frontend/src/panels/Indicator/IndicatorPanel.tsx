@@ -6,16 +6,7 @@
 
 import { useState } from 'react';
 import { useTopics, useSubscription } from '@/data-source/hooks';
-
-function resolveField(obj: unknown, path: string): unknown {
-  const parts = path.split('.');
-  let cur: unknown = obj;
-  for (const p of parts) {
-    if (cur == null || typeof cur !== 'object') return null;
-    cur = (cur as Record<string, unknown>)[p];
-  }
-  return cur ?? null;
-}
+import { resolveField } from '@/message-path';
 
 const inputStyle: React.CSSProperties = {
   background: 'var(--bg-surface-2)',
@@ -44,7 +35,7 @@ export default function IndicatorPanel(props: any) {
   const [showSettings, setShowSettings] = useState(false);
 
   const latestEvent = useSubscription(selectedTopic);
-  const rawValue = latestEvent && field ? resolveField(latestEvent.message, field) : null;
+  const rawValue = latestEvent && field ? resolveField(latestEvent.message, field) ?? null : null;
 
   // Determine state
   let color = COLOR_STALE;

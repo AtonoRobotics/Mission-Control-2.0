@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTopics, useDataSource } from '@/data-source/hooks';
 import type { MessageEvent } from '@/data-source/types';
+import { resolveField } from '@/message-path';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -22,18 +23,6 @@ const HEADER_HEIGHT = 20;
 interface Transition {
   value: string;
   timestamp: number; // epoch ms
-}
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-function resolveField(obj: unknown, path: string): unknown {
-  const parts = path.split('.');
-  let cur: unknown = obj;
-  for (const p of parts) {
-    if (cur == null || typeof cur !== 'object') return undefined;
-    cur = (cur as Record<string, unknown>)[p];
-  }
-  return cur;
 }
 
 // ── Styles ───────────────────────────────────────────────────────────────────
@@ -119,7 +108,7 @@ export default function StateTransitionsPanel(props: any) {
     if (!selectedTopic || !fieldPath) return;
 
     const sub = ds.subscribe(selectedTopic, (event: MessageEvent) => {
-      const raw = resolveField(event.message, fieldPath);
+      const raw = resolveField(event.message, fieldPath) as string | number | boolean | null | undefined;
       if (raw === undefined || raw === null) return;
       const value = String(raw);
       const transitions = transitionsRef.current;

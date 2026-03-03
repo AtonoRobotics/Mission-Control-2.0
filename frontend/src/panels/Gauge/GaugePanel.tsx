@@ -6,16 +6,7 @@
 
 import { useState } from 'react';
 import { useTopics, useSubscription } from '@/data-source/hooks';
-
-function resolveField(obj: unknown, path: string): number | null {
-  const parts = path.split('.');
-  let cur: unknown = obj;
-  for (const p of parts) {
-    if (cur == null || typeof cur !== 'object') return null;
-    cur = (cur as Record<string, unknown>)[p];
-  }
-  return typeof cur === 'number' ? cur : null;
-}
+import { resolveField } from '@/message-path';
 
 /** Convert polar to SVG cartesian coordinates */
 function polarToXY(cx: number, cy: number, r: number, angleDeg: number): [number, number] {
@@ -57,7 +48,8 @@ export default function GaugePanel(props: any) {
   const [showSettings, setShowSettings] = useState(false);
 
   const latestEvent = useSubscription(selectedTopic);
-  const rawValue = latestEvent && field ? resolveField(latestEvent.message, field) : null;
+  const resolved = latestEvent && field ? resolveField(latestEvent.message, field) : undefined;
+  const rawValue = typeof resolved === 'number' ? resolved : null;
 
   // Clamp value for arc positioning, keep raw for display
   const value = rawValue !== null ? Math.max(min, Math.min(max, rawValue)) : null;

@@ -34,16 +34,27 @@ interface LayoutState {
   // Layout variables (for data binding between panels)
   variables: Record<string, unknown>;
 
+  // Server sync
+  syncing: boolean;
+  lastSyncError: string | null;
+
   // Actions — workspace
   setLayout: (layout: MosaicNode<string> | null) => void;
   addPanel: (panelType: string, direction?: MosaicDirection) => void;
   removePanel: (instanceId: string) => void;
   updatePanelConfig: (instanceId: string, config: Record<string, unknown>) => void;
 
-  // Actions — saved layouts
+  // Actions — saved layouts (local)
   saveLayout: (name: string) => void;
   loadLayout: (layoutId: string) => void;
   deleteLayout: (layoutId: string) => void;
+
+  // Actions — server persistence
+  saveLayoutToServer: (name: string) => Promise<void>;
+  fetchLayouts: () => Promise<void>;
+  loadLayoutFromServer: (layoutId: string) => Promise<void>;
+  deleteLayoutFromServer: (layoutId: string) => Promise<void>;
+  updateLayoutOnServer: (layoutId: string) => Promise<void>;
 
   // Actions — variables
   setVariable: (name: string, value: unknown) => void;
@@ -95,6 +106,8 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
   savedLayouts: toSavedLayouts(),
   activeLayoutId: null,
   variables: {},
+  syncing: false,
+  lastSyncError: null,
 
   setLayout: (layout) => set({ layout }),
 
@@ -169,6 +182,102 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       savedLayouts: state.savedLayouts.filter((l) => l.id !== layoutId),
       activeLayoutId: state.activeLayoutId === layoutId ? null : state.activeLayoutId,
     });
+  },
+
+  // ── Server persistence ────────────────────────────────────────────────────
+
+  saveLayoutToServer: async (name) => {
+    const { layout, panelConfigs, savedLayouts } = get();
+    set({ syncing: true, lastSyncError: null });
+    try {
+      const resp = await fetch('/mc/api/layouts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, layout_json: { layout, panelConfigs } }),
+      });
+      if (!resp.ok) throw new Error(`Save failed: ${resp.status}`);
+      const data = await resp.json();
+      const saved: SavedLayout = {
+        id: data.layout_id,
+        name: data.name,
+        layout: data.layout_json.layout,
+        panelConfigs: data.layout_json.panelConfigs,
+        createdAt: data.created_at,
+      };
+      set({ savedLayouts: [...savedLayouts, saved], activeLayoutId: saved.id, syncing: false });
+    } catch (e) {
+      set({ syncing: false, lastSyncError: (e as Error).message });
+    }
+  },
+
+  fetchLayouts: async () => {
+    set({ syncing: true, lastSyncError: null });
+    try {
+      const resp = await fetch('/mc/api/layouts');
+      if (!resp.ok) throw new Error(`Fetch failed: ${resp.status}`);
+      const data = await resp.json();
+      // Merge server layouts with local defaults
+      const defaults = toSavedLayouts();
+      const serverLayouts: SavedLayout[] = data.map((l: any) => ({
+        id: l.layout_id,
+        name: l.name,
+        layout: l.layout_json?.layout,
+        panelConfigs: l.layout_json?.panelConfigs ?? {},
+        createdAt: l.created_at,
+      }));
+      set({ savedLayouts: [...defaults, ...serverLayouts], syncing: false });
+    } catch (e) {
+      set({ syncing: false, lastSyncError: (e as Error).message });
+    }
+  },
+
+  loadLayoutFromServer: async (layoutId) => {
+    set({ syncing: true, lastSyncError: null });
+    try {
+      const resp = await fetch(`/mc/api/layouts/${layoutId}`);
+      if (!resp.ok) throw new Error(`Load failed: ${resp.status}`);
+      const data = await resp.json();
+      set({
+        layout: data.layout_json.layout,
+        panelConfigs: data.layout_json.panelConfigs ?? {},
+        activeLayoutId: layoutId,
+        syncing: false,
+      });
+    } catch (e) {
+      set({ syncing: false, lastSyncError: (e as Error).message });
+    }
+  },
+
+  deleteLayoutFromServer: async (layoutId) => {
+    set({ syncing: true, lastSyncError: null });
+    try {
+      const resp = await fetch(`/mc/api/layouts/${layoutId}`, { method: 'DELETE' });
+      if (!resp.ok) throw new Error(`Delete failed: ${resp.status}`);
+      const state = get();
+      set({
+        savedLayouts: state.savedLayouts.filter((l) => l.id !== layoutId),
+        activeLayoutId: state.activeLayoutId === layoutId ? null : state.activeLayoutId,
+        syncing: false,
+      });
+    } catch (e) {
+      set({ syncing: false, lastSyncError: (e as Error).message });
+    }
+  },
+
+  updateLayoutOnServer: async (layoutId) => {
+    const { layout, panelConfigs } = get();
+    set({ syncing: true, lastSyncError: null });
+    try {
+      const resp = await fetch(`/mc/api/layouts/${layoutId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ layout_json: { layout, panelConfigs } }),
+      });
+      if (!resp.ok) throw new Error(`Update failed: ${resp.status}`);
+      set({ syncing: false });
+    } catch (e) {
+      set({ syncing: false, lastSyncError: (e as Error).message });
+    }
   },
 
   setVariable: (name, value) => {

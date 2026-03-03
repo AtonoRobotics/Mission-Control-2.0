@@ -2,6 +2,22 @@
 All notable changes to Mission Control are documented here.
 Format: [version] - date, then ### Added / ### Changed / ### Fixed sections.
 
+## [3.1.0] - 2026-03-03
+### Fixed
+- Migrated all frontend API calls (~60+) from raw `fetch()` to authenticated `api` axios client
+  - Affected: robotStore, pipelineStore, sceneStore, componentStore, layoutStore, builderStore
+  - Affected: RobotConfigPanel, RobotIsaacPanel, TeamSettings, ProfileSettings, CloudSettings
+  - Affected: McapBrowser, BagRecorder, SceneGenerateModal
+  - Affected: RegistryPage, InfraPage, WorkflowsPage, RobotsPage, AgentsPage, OverviewPage, FleetPage
+  - Root cause: raw `fetch()` bypassed JWT interceptor in `services/api.ts`, causing HTTP 401 on all protected endpoints
+
+### Added
+- ARRI Alexa Mini 3D model (parametric OBJ) in `dobot_cr10/meshes/`
+  - `alexa_mini.obj` — visual mesh (body, PL mount, top rail, rear connector)
+  - `alexa_mini_collision.obj` — bounding box collision mesh
+- URDF integration: `alexa_mini` link, `camera_mount` joint, `camera_optical_frame` at sensor plane
+- Cinema asset registry updated with Alexa Mini dimensions and mesh paths
+
 ## [3.0.0] - 2026-03-01
 ### Added
 - Complete Anthropic best practices enforcement across all layers

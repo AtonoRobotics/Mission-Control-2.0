@@ -28,7 +28,7 @@ router = APIRouter()
 
 class BuildCreate(BaseModel):
     process: str
-    robot_id: Optional[int] = None
+    robot_id: Optional[str] = None
 
 
 class BuildUpdate(BaseModel):
@@ -40,7 +40,7 @@ class BuildUpdate(BaseModel):
 class BuildOut(BaseModel):
     build_id: UUID
     process: str
-    robot_id: Optional[int]
+    robot_id: Optional[str]
     status: str
     steps: list
     null_report: list
@@ -86,7 +86,7 @@ async def create_build(
 
 @router.get("", response_model=list[BuildOut])
 async def list_builds(
-    robot_id: Optional[int] = Query(None),
+    robot_id: Optional[str] = Query(None),
     process: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
     limit: int = Query(50, le=200),

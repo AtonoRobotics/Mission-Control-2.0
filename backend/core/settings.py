@@ -61,6 +61,11 @@ class Settings(BaseSettings):
     MC_CONTAINER_GROOT: str = "groot"
     MC_CONTAINER_COSMOS: str = "cosmos"
 
+    # --- LLM (Ollama on DGX Spark) ---
+    MC_OLLAMA_BASE_URL: str = "http://spark-2b53.local:11434/v1"
+    MC_OLLAMA_MODEL: str = "qwen2.5-coder:32b"
+    MC_OLLAMA_TIMEOUT: int = 300
+
     # --- Security ---
     MC_SECRET_KEY: str
 

@@ -72,6 +72,14 @@ const defaultSceneConfig: SceneConfig = {
 
 // --- Store ---
 
+export interface SavedSceneSummary {
+  scene_id: string;
+  name: string;
+  description?: string;
+  created_at: string;
+  updated_at: string;
+}
+
 interface SceneState {
   sceneConfig: SceneConfig;
   selectedPlacementId: string | null;
@@ -82,6 +90,9 @@ interface SceneState {
   sceneViewMode: '2d' | '3d' | 'split';
   generating: boolean;
   generateError: string | null;
+  savedSceneId: string | null;
+  savedScenes: SavedSceneSummary[];
+  saving: boolean;
 
   setSceneConfig: (config: Partial<SceneConfig>) => void;
   addPlacement: (placement: ScenePlacement) => void;
@@ -94,6 +105,11 @@ interface SceneState {
   uploadAsset: (file: File, fileType: string) => Promise<RegistryAsset | null>;
   generateScene: (prompt: string, taskType: string, robotId?: string) => Promise<void>;
   resetScene: () => void;
+  saveScene: (name?: string) => Promise<void>;
+  loadScene: (sceneId: string) => Promise<void>;
+  fetchSavedScenes: () => Promise<void>;
+  deleteScene: (sceneId: string) => Promise<void>;
+  exportSceneJson: () => void;
 }
 
 export const useSceneStore = create<SceneState>((set, get) => ({
@@ -106,6 +122,9 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   sceneViewMode: 'split',
   generating: false,
   generateError: null,
+  savedSceneId: null,
+  savedScenes: [],
+  saving: false,
 
   setSceneConfig: (config) => {
     set({ sceneConfig: { ...get().sceneConfig, ...config } });
@@ -196,20 +215,133 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   generateScene: async (prompt, taskType, robotId) => {
     set({ generating: true, generateError: null });
     try {
+      // Submit job — backend returns { job_id, status } with HTTP 202
       const res = await fetch('/mc/api/pipelines/scenes/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt, task_type: taskType, robot_id: robotId ?? null }),
       });
       if (!res.ok) {
-        const err = await res.text();
-        throw new Error(err || `HTTP ${res.status}`);
+        const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+        throw new Error(err.detail || `HTTP ${res.status}`);
       }
-      const data: SceneConfig = await res.json();
-      set({ sceneConfig: data, generating: false });
+      const { job_id } = await res.json();
+
+      // Poll until complete or failed
+      const POLL_INTERVAL = 3000;
+      const MAX_POLLS = 200; // ~10 minutes
+      for (let i = 0; i < MAX_POLLS; i++) {
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL));
+        const poll = await fetch(`/mc/api/pipelines/scenes/generate/${job_id}`);
+        if (!poll.ok) throw new Error(`Poll failed: HTTP ${poll.status}`);
+        const job = await poll.json();
+
+        if (job.status === 'completed' && job.result) {
+          set({ sceneConfig: job.result, generating: false, savedSceneId: null });
+          // Auto-save the generated scene
+          get().saveScene(job.result.name || 'Generated Scene');
+          return;
+        }
+        if (job.status === 'failed') {
+          throw new Error(job.error || 'Generation failed');
+        }
+      }
+      throw new Error('Generation timed out');
     } catch (e) {
       set({ generating: false, generateError: e instanceof Error ? e.message : 'Generation failed' });
     }
+  },
+
+  saveScene: async (name?) => {
+    const { sceneConfig, savedSceneId } = get();
+    set({ saving: true });
+    try {
+      if (savedSceneId) {
+        // PATCH existing
+        const res = await fetch(`/mc/api/pipelines/scenes/${savedSceneId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: name ?? sceneConfig.name,
+            description: sceneConfig.description,
+            scene_json: sceneConfig,
+          }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      } else {
+        // POST new
+        const res = await fetch('/mc/api/pipelines/scenes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: name ?? sceneConfig.name,
+            description: sceneConfig.description,
+            scene_json: sceneConfig,
+          }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        set({ savedSceneId: data.scene_id });
+      }
+    } catch (e) {
+      console.error('Failed to save scene:', e);
+    } finally {
+      set({ saving: false });
+    }
+  },
+
+  loadScene: async (sceneId) => {
+    try {
+      const res = await fetch(`/mc/api/pipelines/scenes/${sceneId}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (data.scene_json) {
+        set({
+          sceneConfig: data.scene_json,
+          savedSceneId: data.scene_id,
+          selectedPlacementId: null,
+        });
+      }
+    } catch (e) {
+      console.error('Failed to load scene:', e);
+    }
+  },
+
+  fetchSavedScenes: async () => {
+    try {
+      const res = await fetch('/mc/api/pipelines/scenes?limit=50');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      set({ savedScenes: Array.isArray(data) ? data : [] });
+    } catch {
+      set({ savedScenes: [] });
+    }
+  },
+
+  deleteScene: async (sceneId) => {
+    try {
+      const res = await fetch(`/mc/api/pipelines/scenes/${sceneId}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const { savedSceneId, savedScenes } = get();
+      set({
+        savedScenes: savedScenes.filter((s) => s.scene_id !== sceneId),
+        savedSceneId: savedSceneId === sceneId ? null : savedSceneId,
+      });
+    } catch (e) {
+      console.error('Failed to delete scene:', e);
+    }
+  },
+
+  exportSceneJson: () => {
+    const { sceneConfig } = get();
+    const json = JSON.stringify(sceneConfig, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${sceneConfig.name.replace(/\s+/g, '_').toLowerCase()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
   },
 
   resetScene: () => {
@@ -218,6 +350,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       selectedPlacementId: null,
       generating: false,
       generateError: null,
+      savedSceneId: null,
     });
   },
 }));

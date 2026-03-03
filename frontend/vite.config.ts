@@ -13,6 +13,11 @@ export default defineConfig({
     port: 3000,
     allowedHosts: true,
     proxy: {
+      '/mc/api': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/mc/, ''),
+      },
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,

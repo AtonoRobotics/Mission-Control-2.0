@@ -102,6 +102,7 @@ class SceneRegistry(Base):
     usd_stage_file_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     world_config_file_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     robot_ids: Mapped[list] = mapped_column(JSONB, nullable=False, server_default="[]")
+    scene_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now())
 

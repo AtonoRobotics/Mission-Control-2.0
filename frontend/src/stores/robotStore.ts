@@ -55,6 +55,15 @@ export interface CollisionSphere {
   radius: number | null;
 }
 
+export interface RobotFile {
+  file_id: string;
+  file_type: string;
+  file_path: string;
+  status: string;
+  version: string;
+  created_at: string;
+}
+
 interface RobotState {
   robots: RobotAsset[];
   selectedRobotId: string | null;
@@ -68,9 +77,20 @@ interface RobotState {
   spheres: CollisionSphere[];
   specsLoading: boolean;
 
+  // Config files for selected robot
+  robotFiles: RobotFile[];
+  robotFilesLoading: boolean;
+
+  // Version history for currently viewed file
+  fileHistory: RobotFile[];
+  fileHistoryLoading: boolean;
+
   fetchRobots: () => Promise<void>;
   selectRobot: (robotId: string | null) => void;
   fetchSpecs: (robotId: string) => Promise<void>;
+  fetchRobotFiles: (robotId: string) => Promise<void>;
+  fetchFileHistory: (fileId: string) => Promise<void>;
+  restoreFileVersion: (fileId: string) => Promise<RobotFile | null>;
 }
 
 export const useRobotStore = create<RobotState>((set, get) => ({
@@ -83,6 +103,10 @@ export const useRobotStore = create<RobotState>((set, get) => ({
   sensors: [],
   spheres: [],
   specsLoading: false,
+  robotFiles: [],
+  robotFilesLoading: false,
+  fileHistory: [],
+  fileHistoryLoading: false,
 
   fetchRobots: async () => {
     set({ loading: true, error: null });
@@ -97,8 +121,16 @@ export const useRobotStore = create<RobotState>((set, get) => ({
   },
 
   selectRobot: (robotId) => {
-    set({ selectedRobotId: robotId, joints: [], links: [], sensors: [], spheres: [] });
-    if (robotId) get().fetchSpecs(robotId);
+    set({
+      selectedRobotId: robotId,
+      joints: [], links: [], sensors: [], spheres: [],
+      robotFiles: [],
+      robotFilesLoading: !!robotId,
+    });
+    if (robotId) {
+      get().fetchSpecs(robotId);
+      get().fetchRobotFiles(robotId);
+    }
   },
 
   fetchSpecs: async (robotId) => {
@@ -125,6 +157,42 @@ export const useRobotStore = create<RobotState>((set, get) => ({
       });
     } catch {
       set({ specsLoading: false });
+    }
+  },
+
+  fetchRobotFiles: async (robotId) => {
+    set({ robotFilesLoading: true });
+    try {
+      const res = await fetch(`/mc/api/registry/robots/${robotId}/files`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      set({ robotFiles: Array.isArray(data) ? data : [], robotFilesLoading: false });
+    } catch {
+      set({ robotFiles: [], robotFilesLoading: false });
+    }
+  },
+
+  fetchFileHistory: async (fileId) => {
+    set({ fileHistoryLoading: true });
+    try {
+      const res = await fetch(`/mc/api/registry/files/${fileId}/history`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      set({ fileHistory: Array.isArray(data) ? data : [], fileHistoryLoading: false });
+    } catch {
+      set({ fileHistory: [], fileHistoryLoading: false });
+    }
+  },
+
+  restoreFileVersion: async (fileId) => {
+    try {
+      const res = await fetch(`/mc/api/registry/files/${fileId}/restore`, {
+        method: 'POST',
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.json();
+    } catch {
+      return null;
     }
   },
 }));

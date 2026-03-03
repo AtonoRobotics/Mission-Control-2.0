@@ -4,14 +4,13 @@ Physical AI Pipeline CRUD, run lifecycle.
 Reuses workflow_graphs and workflow_runs DB tables.
 """
 
+import copy
 import uuid
 
 from datetime import datetime
 from enum import Enum
 from typing import Optional
 from uuid import UUID
-
-import copy
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -20,7 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import func
 
-from db.registry.models import WorkflowGraph, WorkflowRun
+from db.registry.models import SceneRegistry, WorkflowGraph, WorkflowRun
 from db.session import get_registry_session
 from services.pipeline_templates import get_template, list_templates, TEMPLATE_META
 
@@ -236,129 +235,227 @@ class SceneGenerateResponse(BaseModel):
     placements: list[dict]
 
 
-@router.post("/scenes/generate", response_model=SceneGenerateResponse)
+class SceneJobOut(BaseModel):
+    job_id: str
+    status: str  # pending, running, completed, failed
+    result: Optional[dict] = None
+    error: Optional[str] = None
+
+
+# In-memory job store (single-process backend, ephemeral jobs)
+import asyncio
+_scene_jobs: dict[str, dict] = {}
+
+
+async def _run_scene_job(job_id: str, body: SceneGenerateRequest, robot_dict: dict):
+    """Background task: call LLM and store result in job dict."""
+    from core.settings import get_settings
+    from services.llm_client import generate_scene_with_llm
+
+    _scene_jobs[job_id]["status"] = "running"
+    try:
+        settings = get_settings()
+        scene = await generate_scene_with_llm(
+            prompt=body.prompt,
+            task_type=body.task_type,
+            environment_style=body.environment_style,
+            robot_dict=robot_dict,
+            settings=settings,
+        )
+        _scene_jobs[job_id]["status"] = "completed"
+        _scene_jobs[job_id]["result"] = scene
+    except HTTPException as exc:
+        _scene_jobs[job_id]["status"] = "failed"
+        _scene_jobs[job_id]["error"] = exc.detail
+    except Exception as exc:
+        _scene_jobs[job_id]["status"] = "failed"
+        _scene_jobs[job_id]["error"] = str(exc)
+
+
+@router.post("/scenes/generate", response_model=SceneJobOut, status_code=202)
 async def generate_scene(
     body: SceneGenerateRequest,
     session: AsyncSession = Depends(get_registry_session),
 ):
-    """AI scene generation — dispatches to simulate agent.
-    For now, returns a template-based scene layout.
-    """
+    """Start async scene generation — returns job_id immediately."""
     from db.registry.models import Robot
+
     result = await session.execute(
         select(Robot).where(Robot.robot_id == body.robot_id)
     )
     robot = result.scalar_one_or_none()
-    reach_m = (robot.reach_mm / 1000) if robot and robot.reach_mm else 1.0
 
-    placements = []
+    robot_dict = {
+        "robot_id": body.robot_id,
+        "name": robot.name if robot else body.robot_id,
+        "reach_mm": robot.reach_mm if robot else None,
+        "dof": robot.dof if robot else None,
+        "payload_kg": robot.payload_kg if robot else None,
+    }
 
-    # Always add the robot at origin
-    placements.append({
-        "id": str(uuid.uuid4()),
-        "asset_id": body.robot_id,
-        "asset_source": "registry",
-        "asset_type": "robot",
-        "label": robot.name if robot else body.robot_id,
-        "position": {"x": 0, "y": 0, "z": 0},
-        "rotation": {"x": 0, "y": 0, "z": 0},
-        "scale": {"x": 1, "y": 1, "z": 1},
-        "physics_enabled": True,
-        "is_global": False,
-        "properties": {},
-    })
+    job_id = str(uuid.uuid4())
+    _scene_jobs[job_id] = {"status": "pending", "result": None, "error": None}
+    asyncio.create_task(_run_scene_job(job_id, body, robot_dict))
+    logger.info("scene_job_created", job_id=job_id)
 
-    if body.task_type == "manipulation":
-        placements.append({
-            "id": str(uuid.uuid4()),
-            "asset_id": "nvidia_table",
-            "asset_source": "nvidia",
-            "asset_type": "object",
-            "label": "Table",
-            "position": {"x": reach_m * 0.5, "y": 0, "z": 0},
-            "rotation": {"x": 0, "y": 0, "z": 0},
-            "scale": {"x": 1, "y": 1, "z": 1},
-            "physics_enabled": False,
-            "is_global": False,
-            "properties": {},
-        })
-        obj_names = ["Box", "Mug", "Banana"]
-        for i, name in enumerate(obj_names):
-            placements.append({
-                "id": str(uuid.uuid4()),
-                "asset_id": f"nvidia_{name.lower()}",
-                "asset_source": "nvidia",
-                "asset_type": "object",
-                "label": name,
-                "position": {
-                    "x": reach_m * 0.4 + 0.1 * (i - 1),
-                    "y": 0.15 * (i - 1),
-                    "z": 0.75,
-                },
-                "rotation": {"x": 0, "y": 0, "z": 0},
-                "scale": {"x": 1, "y": 1, "z": 1},
-                "physics_enabled": True,
-                "is_global": False,
-                "properties": {},
-            })
-    elif body.task_type == "navigation":
-        for i in range(5):
-            placements.append({
-                "id": str(uuid.uuid4()),
-                "asset_id": "nvidia_cardbox_a",
-                "asset_source": "nvidia",
-                "asset_type": "object",
-                "label": f"Obstacle {i+1}",
-                "position": {
-                    "x": (i % 3 - 1) * 2.0,
-                    "y": (i // 3 - 1) * 2.0,
-                    "z": 0,
-                },
-                "rotation": {"x": 0, "y": 0, "z": 0},
-                "scale": {"x": 1, "y": 1, "z": 1},
-                "physics_enabled": False,
-                "is_global": False,
-                "properties": {},
-            })
+    return SceneJobOut(job_id=job_id, status="pending")
 
-    # Add overhead camera
-    placements.append({
-        "id": str(uuid.uuid4()),
-        "asset_id": "nvidia_camera",
-        "asset_source": "nvidia",
-        "asset_type": "sensor",
-        "label": "Overhead Camera",
-        "position": {"x": 0, "y": 0, "z": 2.0},
-        "rotation": {"x": -90, "y": 0, "z": 0},
-        "scale": {"x": 1, "y": 1, "z": 1},
-        "physics_enabled": False,
-        "is_global": True,
-        "properties": {"resolution": [640, 480], "fov": 60},
-    })
 
-    # Add dome light
-    placements.append({
-        "id": str(uuid.uuid4()),
-        "asset_id": "nvidia_dome_light",
-        "asset_source": "nvidia",
-        "asset_type": "light",
-        "label": "Dome Light",
-        "position": {"x": 0, "y": 0, "z": 3.0},
-        "rotation": {"x": 0, "y": 0, "z": 0},
-        "scale": {"x": 1, "y": 1, "z": 1},
-        "physics_enabled": False,
-        "is_global": True,
-        "properties": {"intensity": 3000},
-    })
+@router.get("/scenes/generate/{job_id}", response_model=SceneJobOut)
+async def poll_scene_job(job_id: str):
+    """Poll for scene generation result."""
+    job = _scene_jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return SceneJobOut(job_id=job_id, **job)
 
-    scene_name = f"{body.task_type.replace('_', ' ').title()} Scene"
-    return SceneGenerateResponse(
-        name=scene_name,
-        description=f"Auto-generated {body.task_type} scene for {body.robot_id}. {body.prompt}",
-        placements=placements,
-        num_envs=32 if body.task_type in ("manipulation", "navigation") else None,
-        env_spacing=2.5 if body.task_type in ("manipulation", "navigation") else None,
+
+# =============================================================================
+# Scene Persistence CRUD
+# =============================================================================
+
+
+class SceneSaveRequest(BaseModel):
+    name: str
+    description: Optional[str] = None
+    scene_json: dict
+
+
+class SceneUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    scene_json: Optional[dict] = None
+
+
+class SceneListOut(BaseModel):
+    scene_id: UUID
+    name: str
+    description: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class SceneDetailOut(BaseModel):
+    scene_id: UUID
+    name: str
+    description: Optional[str]
+    scene_json: Optional[dict]
+    robot_ids: list
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+@router.post("/scenes", response_model=SceneDetailOut, status_code=201)
+async def save_scene(
+    body: SceneSaveRequest,
+    session: AsyncSession = Depends(get_registry_session),
+):
+    """Save a new scene to the registry."""
+    # Extract robot_ids from placements in scene_json
+    robot_ids = []
+    for p in body.scene_json.get("placements", []):
+        if p.get("asset_type") == "robot" and p.get("asset_id"):
+            robot_ids.append(p["asset_id"])
+
+    scene = SceneRegistry(
+        name=body.name,
+        description=body.description,
+        scene_json=body.scene_json,
+        robot_ids=robot_ids,
     )
+    session.add(scene)
+    await session.flush()
+    await session.refresh(scene)
+    logger.info("scene_saved", scene_id=str(scene.scene_id), name=body.name)
+    return scene
+
+
+@router.get("/scenes", response_model=list[SceneListOut])
+async def list_scenes(
+    limit: int = Query(50, le=200),
+    offset: int = Query(0, ge=0),
+    session: AsyncSession = Depends(get_registry_session),
+):
+    """List saved scenes (summaries, no scene_json)."""
+    stmt = (
+        select(SceneRegistry)
+        .order_by(SceneRegistry.updated_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    result = await session.execute(stmt)
+    return result.scalars().all()
+
+
+@router.get("/scenes/{scene_id}", response_model=SceneDetailOut)
+async def get_scene(
+    scene_id: UUID,
+    session: AsyncSession = Depends(get_registry_session),
+):
+    """Get a saved scene with full scene_json."""
+    result = await session.execute(
+        select(SceneRegistry).where(SceneRegistry.scene_id == scene_id)
+    )
+    scene = result.scalar_one_or_none()
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+    return scene
+
+
+@router.patch("/scenes/{scene_id}", response_model=SceneDetailOut)
+async def update_scene(
+    scene_id: UUID,
+    body: SceneUpdateRequest,
+    session: AsyncSession = Depends(get_registry_session),
+):
+    """Update a saved scene's name, description, or scene_json."""
+    result = await session.execute(
+        select(SceneRegistry).where(SceneRegistry.scene_id == scene_id)
+    )
+    scene = result.scalar_one_or_none()
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+
+    if body.name is not None:
+        scene.name = body.name
+    if body.description is not None:
+        scene.description = body.description
+    if body.scene_json is not None:
+        scene.scene_json = body.scene_json
+        # Re-extract robot_ids from updated placements
+        robot_ids = []
+        for p in body.scene_json.get("placements", []):
+            if p.get("asset_type") == "robot" and p.get("asset_id"):
+                robot_ids.append(p["asset_id"])
+        scene.robot_ids = robot_ids
+    scene.updated_at = func.now()
+
+    await session.flush()
+    await session.refresh(scene)
+    logger.info("scene_updated", scene_id=str(scene_id))
+    return scene
+
+
+@router.delete("/scenes/{scene_id}", status_code=204)
+async def delete_scene(
+    scene_id: UUID,
+    session: AsyncSession = Depends(get_registry_session),
+):
+    """Delete a saved scene."""
+    result = await session.execute(
+        select(SceneRegistry).where(SceneRegistry.scene_id == scene_id)
+    )
+    scene = result.scalar_one_or_none()
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+
+    await session.delete(scene)
+    await session.flush()
+    logger.info("scene_deleted", scene_id=str(scene_id))
 
 
 # =============================================================================

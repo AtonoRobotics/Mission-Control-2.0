@@ -178,6 +178,11 @@ body {
   50% { opacity: 0.5; }
 }
 
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 .viewport-bg {
   background: linear-gradient(180deg, #0a0a0a 0%, #0f0f12 100%);
 }

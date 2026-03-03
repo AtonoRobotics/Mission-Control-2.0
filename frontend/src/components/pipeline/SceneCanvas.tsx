@@ -1,4 +1,5 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Save, Download, FolderOpen, Check, Loader2, Trash2 } from 'lucide-react';
 import { useSceneStore, type SceneConfig, type ScenePlacement } from '@/stores/sceneStore';
 import SceneCanvas2D from './SceneCanvas2D';
 import { SceneCanvas3D } from './SceneCanvas3D';
@@ -91,6 +92,55 @@ const panelStyle: React.CSSProperties = {
   position: 'relative',
 };
 
+const statusBtnStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 5,
+  padding: '3px 10px',
+  fontSize: 11,
+  fontFamily: 'monospace',
+  fontWeight: 600,
+  background: 'var(--bg-surface-2)',
+  color: 'var(--text-secondary)',
+  border: '1px solid var(--border-default)',
+  borderRadius: 'var(--radius-sm)',
+  cursor: 'pointer',
+  transition: 'border-color 0.15s, color 0.15s, box-shadow 0.15s',
+  lineHeight: 1,
+};
+
+const loadDropdownStyle: React.CSSProperties = {
+  position: 'absolute',
+  bottom: '100%',
+  right: 0,
+  marginBottom: 6,
+  background: 'var(--bg-surface-2)',
+  border: '1px solid var(--border-default)',
+  borderRadius: 6,
+  minWidth: 260,
+  maxHeight: 280,
+  overflowY: 'auto',
+  zIndex: 100,
+  boxShadow: '0 -4px 24px rgba(0,0,0,0.5)',
+};
+
+const dropdownItemStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  width: '100%',
+  padding: '8px 12px',
+  background: 'transparent',
+  color: 'var(--text-primary)',
+  border: 'none',
+  borderBottom: '1px solid var(--border-default)',
+  textAlign: 'left',
+  cursor: 'pointer',
+  fontSize: 11,
+  fontFamily: 'monospace',
+  transition: 'background 0.1s',
+};
+
 // --- Component ---
 
 export default function SceneCanvas({
@@ -103,8 +153,44 @@ export default function SceneCanvas({
 }: SceneCanvasProps) {
   const sceneViewMode = useSceneStore((s) => s.sceneViewMode);
   const setSceneViewMode = useSceneStore((s) => s.setSceneViewMode);
+  const generating = useSceneStore((s) => s.generating);
+  const generateError = useSceneStore((s) => s.generateError);
+  const saving = useSceneStore((s) => s.saving);
+  const savedSceneId = useSceneStore((s) => s.savedSceneId);
+  const savedScenes = useSceneStore((s) => s.savedScenes);
+  const saveScene = useSceneStore((s) => s.saveScene);
+  const loadScene = useSceneStore((s) => s.loadScene);
+  const fetchSavedScenes = useSceneStore((s) => s.fetchSavedScenes);
+  const exportSceneJson = useSceneStore((s) => s.exportSceneJson);
 
-  const { placements, name } = sceneConfig;
+  const [loadOpen, setLoadOpen] = useState(false);
+  const [saveFlash, setSaveFlash] = useState(false);
+  const loadRef = useRef<HTMLDivElement>(null);
+
+  const placements = sceneConfig?.placements ?? [];
+  const name = sceneConfig?.name ?? 'Untitled Scene';
+
+  // Close Load dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (loadRef.current && !loadRef.current.contains(e.target as Node)) {
+        setLoadOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const handleSave = useCallback(async () => {
+    await saveScene();
+    setSaveFlash(true);
+    setTimeout(() => setSaveFlash(false), 1200);
+  }, [saveScene]);
+
+  const handleLoadOpen = useCallback(() => {
+    fetchSavedScenes();
+    setLoadOpen((v) => !v);
+  }, [fetchSavedScenes]);
 
   /** Handle asset drop from the AssetBrowser — creates a new ScenePlacement */
   const onDropAsset = useCallback(
@@ -199,10 +285,125 @@ export default function SceneCanvas({
       </div>
 
       {/* Status bar */}
-      <div style={statusBarStyle}>
-        <span>{placements.length} asset{placements.length !== 1 ? 's' : ''} placed</span>
-        <span style={{ margin: '0 8px', color: '#333' }}>|</span>
-        <span>Scene: {name}</span>
+      <div style={{ ...statusBarStyle, justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {generating ? (
+            <span style={{ color: 'var(--accent)' }}>
+              <Loader2 size={12} style={{ display: 'inline', marginRight: 4, animation: 'spin 1s linear infinite' }} />
+              Generating scene...
+            </span>
+          ) : generateError ? (
+            <span style={{ color: 'var(--danger)' }}>Error: {generateError}</span>
+          ) : (
+            <>
+              <span>{placements.length} asset{placements.length !== 1 ? 's' : ''} placed</span>
+              <span style={{ color: 'var(--border-default)' }}>|</span>
+              <span>Scene: {name}</span>
+              {savedSceneId && (
+                <span className="badge badge-accent" style={{ marginLeft: 2 }}>saved</span>
+              )}
+            </>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, position: 'relative' }} ref={loadRef}>
+          {/* Save */}
+          <button
+            style={{
+              ...statusBtnStyle,
+              ...(saveFlash ? { borderColor: 'var(--accent)', color: 'var(--accent)', boxShadow: '0 0 6px var(--accent-glow)' } : {}),
+              ...(saving ? { opacity: 0.5, cursor: 'wait' } : {}),
+            }}
+            onClick={handleSave}
+            disabled={saving || generating}
+            title={savedSceneId ? 'Update saved scene (Ctrl+S)' : 'Save scene to database'}
+            onMouseEnter={(e) => { if (!saving) (e.currentTarget.style.borderColor = 'var(--accent)'); }}
+            onMouseLeave={(e) => { if (!saveFlash) (e.currentTarget.style.borderColor = 'var(--border-default)'); }}
+          >
+            {saveFlash ? <Check size={12} /> : saving ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <Save size={12} />}
+            {saveFlash ? 'Saved' : saving ? 'Saving' : 'Save'}
+          </button>
+
+          {/* Export */}
+          <button
+            style={statusBtnStyle}
+            onClick={exportSceneJson}
+            disabled={generating}
+            title="Download scene as JSON"
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--accent)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-default)'; }}
+          >
+            <Download size={12} />
+            Export
+          </button>
+
+          {/* Load */}
+          <button
+            style={{
+              ...statusBtnStyle,
+              ...(loadOpen ? { borderColor: 'var(--accent)', color: 'var(--text-accent)' } : {}),
+            }}
+            onClick={handleLoadOpen}
+            disabled={generating}
+            title="Load a saved scene"
+            onMouseEnter={(e) => { if (!loadOpen) e.currentTarget.style.borderColor = 'var(--accent)'; }}
+            onMouseLeave={(e) => { if (!loadOpen) e.currentTarget.style.borderColor = 'var(--border-default)'; }}
+          >
+            <FolderOpen size={12} />
+            Load
+          </button>
+
+          {/* Load dropdown */}
+          {loadOpen && (
+            <div style={loadDropdownStyle}>
+              <div style={{ padding: '6px 12px', fontSize: 10, fontFamily: 'monospace', color: 'var(--text-muted)', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', borderBottom: '1px solid var(--border-default)' }}>
+                Saved Scenes
+              </div>
+              {savedScenes.length === 0 ? (
+                <div style={{ padding: '16px 12px', color: 'var(--text-muted)', fontSize: 11, fontFamily: 'monospace', textAlign: 'center' }}>
+                  No saved scenes yet
+                </div>
+              ) : (
+                savedScenes.map((s) => (
+                  <div
+                    key={s.scene_id}
+                    style={{
+                      ...dropdownItemStyle,
+                      ...(s.scene_id === savedSceneId ? { background: 'var(--accent-dim)', borderLeft: '2px solid var(--accent)' } : {}),
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-surface-3)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = s.scene_id === savedSceneId ? 'var(--accent-dim)' : 'transparent'; }}
+                  >
+                    <button
+                      style={{ all: 'unset', cursor: 'pointer', flex: 1, minWidth: 0 }}
+                      onClick={() => { loadScene(s.scene_id); setLoadOpen(false); }}
+                    >
+                      <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</div>
+                      <div style={{ color: 'var(--text-muted)', fontSize: 10, marginTop: 2 }}>
+                        {new Date(s.updated_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    </button>
+                    <button
+                      style={{ all: 'unset', cursor: 'pointer', padding: '4px', color: 'var(--text-muted)', flexShrink: 0, display: 'flex', borderRadius: 3, transition: 'color 0.15s' }}
+                      title="Delete scene"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm(`Delete "${s.name}"?`)) {
+                          const store = useSceneStore.getState();
+                          store.deleteScene(s.scene_id);
+                        }
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--danger)'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-muted)'; }}
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

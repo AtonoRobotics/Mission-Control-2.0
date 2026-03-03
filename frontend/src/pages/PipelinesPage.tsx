@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { usePipelineStore, type Pipeline, type PipelineTemplate, type PipelineGraphJson } from '@/stores/pipelineStore';
 import NodePalette from '@/components/pipeline/NodePalette';
 import PipelineCanvas from '@/components/pipeline/PipelineCanvas';
@@ -262,16 +262,30 @@ function GenerateModal({ onClose }: { onClose: () => void }) {
   const [prompt, setPrompt] = useState('');
   const [taskType, setTaskType] = useState('manipulation');
   const [robotId, setRobotId] = useState('dobot_cr10');
+  const [elapsed, setElapsed] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (generating) {
+      setElapsed(0);
+      timerRef.current = setInterval(() => setElapsed((s) => s + 1), 1000);
+    } else {
+      if (timerRef.current) clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [generating]);
 
   const [validationMsg, setValidationMsg] = useState('');
-  const handleGenerate = async () => {
+  const handleGenerate = () => {
     if (!prompt.trim()) {
       setValidationMsg('Enter a scene description');
       return;
     }
     setValidationMsg('');
-    await generateScene(prompt, taskType, robotId || undefined);
-    if (!useSceneStore.getState().generateError) onClose();
+    // Fire and close — generation runs in background, status shown in canvas bar
+    generateScene(prompt, taskType, robotId || undefined);
+    onClose();
   };
 
   const taskTypes = ['manipulation', 'navigation', 'inspection', 'data_collection'];
@@ -365,7 +379,9 @@ function GenerateModal({ onClose }: { onClose: () => void }) {
               opacity: generating ? 0.5 : 1,
             }}
           >
-            {generating ? 'Generating...' : 'Generate'}
+            {generating
+              ? elapsed >= 5 ? `Generating... ${elapsed}s` : 'Generating...'
+              : 'Generate'}
           </button>
         </div>
       </div>

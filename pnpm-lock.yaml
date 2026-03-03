@@ -16,6 +16,9 @@ importers:
       '@mcap/core':
         specifier: ^2.2.0
         version: 2.2.0
+      '@mission-control/core':
+        specifier: workspace:*
+        version: link:../packages/core
       '@monaco-editor/react':
         specifier: ^4.6.0
         version: 4.7.0(monaco-editor@0.55.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -119,6 +122,19 @@ importers:
       vitest:
         specifier: ^4.0.18
         version: 4.0.18(jiti@1.21.7)(jsdom@28.1.0)
+
+  packages/core:
+    dependencies:
+      roslib:
+        specifier: ^2.0.0
+        version: 2.0.1
+      zustand:
+        specifier: ^5.0.0
+        version: 5.0.11(@types/react@18.3.28)(react@18.3.1)(use-sync-external-store@1.6.0(react@18.3.1))
+    devDependencies:
+      typescript:
+        specifier: ^5.5.0
+        version: 5.9.3
 
 packages:
 

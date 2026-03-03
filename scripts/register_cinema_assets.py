@@ -17,6 +17,11 @@ PACKAGES = [
             "fps_max": 120,
             "recording_formats": ["ARRIRAW", "ProRes"],
             "weight_kg": 2.3,
+            "dimensions_mm": [184.75, 124.83, 140.0],
+            "lens_mount": "PL",
+            "flange_distance_mm": 52.0,
+            "mesh_visual": "meshes/alexa_mini.obj",
+            "mesh_collision": "meshes/alexa_mini_collision.obj",
         },
     },
     {

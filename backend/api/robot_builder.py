@@ -23,8 +23,7 @@ router = APIRouter()
 class PackageCreate(BaseModel):
     name: str
     package_type: str
-    component_ids: list = []
-    tree_json: dict = {}
+    component_tree: dict = {}
     total_mass_kg: float | None = None
     description: str | None = None
 
@@ -32,8 +31,7 @@ class PackageCreate(BaseModel):
 class PackageUpdate(BaseModel):
     name: str | None = None
     package_type: str | None = None
-    component_ids: list | None = None
-    tree_json: dict | None = None
+    component_tree: dict | None = None
     total_mass_kg: float | None = None
     description: str | None = None
 
@@ -44,8 +42,7 @@ class PackageOut(BaseModel):
     package_id: UUID
     name: str
     package_type: str
-    component_ids: list
-    tree_json: dict
+    component_tree: dict
     total_mass_kg: float | None
     description: str | None
     created_at: datetime
@@ -72,7 +69,6 @@ class ConfigCreate(BaseModel):
     base_config: dict | None = None
     payload_package_id: UUID | None = None
     sensor_package_id: UUID | None = None
-    notes: str | None = None
 
 
 class ConfigUpdate(BaseModel):
@@ -81,10 +77,8 @@ class ConfigUpdate(BaseModel):
     base_config: dict | None = None
     payload_package_id: UUID | None = None
     sensor_package_id: UUID | None = None
+    status: str | None = None
     generated_files: dict | None = None
-    build_status: str | None = None
-    build_log: dict | None = None
-    notes: str | None = None
 
 
 class ConfigOut(BaseModel):
@@ -97,10 +91,9 @@ class ConfigOut(BaseModel):
     base_config: dict | None
     payload_package_id: UUID | None
     sensor_package_id: UUID | None
+    status: str
     generated_files: dict | None
-    build_status: str
-    build_log: dict | None
-    notes: str | None
+    validation_report_id: UUID | None
     created_at: datetime
     updated_at: datetime
 
@@ -112,7 +105,7 @@ class ConfigListOut(BaseModel):
     robot_id: str
     name: str
     base_type: str
-    build_status: str
+    status: str
     created_at: datetime
 
 
@@ -215,7 +208,7 @@ async def create_config(
 @router.get("/configs", response_model=list[ConfigListOut])
 async def list_configs(
     robot_id: str | None = Query(None),
-    build_status: str | None = Query(None),
+    status: str | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     session: AsyncSession = Depends(get_registry_session),
@@ -223,8 +216,8 @@ async def list_configs(
     query = select(RobotConfiguration).order_by(RobotConfiguration.created_at.desc())
     if robot_id:
         query = query.where(RobotConfiguration.robot_id == robot_id)
-    if build_status:
-        query = query.where(RobotConfiguration.build_status == build_status)
+    if status:
+        query = query.where(RobotConfiguration.status == status)
     result = await session.execute(query.offset(offset).limit(limit))
     return result.scalars().all()
 
@@ -290,13 +283,9 @@ async def trigger_build(
     row = result.scalar_one_or_none()
     if not row:
         raise HTTPException(status_code=404, detail="Configuration not found")
-    if row.build_status == "building":
+    if row.status == "building":
         raise HTTPException(status_code=409, detail="Build already in progress")
-    row.build_status = "building"
-    row.build_log = {
-        "started_at": datetime.now(timezone.utc).isoformat(),
-        "steps": [],
-    }
+    row.status = "building"
     await session.flush()
     await session.refresh(row)
     logger.info("config_build_triggered", config_id=str(config_id))

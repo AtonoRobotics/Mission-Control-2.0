@@ -17,6 +17,7 @@ exec docker run \
   --runtime nvidia \
   --network host \
   --ipc host \
+  --entrypoint "" \
   -e NVIDIA_VISIBLE_DEVICES=all \
   -e NVIDIA_DRIVER_CAPABILITIES=all \
   -e ROS_DOMAIN_ID="$ROS_DOMAIN_ID" \

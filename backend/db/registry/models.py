@@ -466,8 +466,7 @@ class ConfigurationPackage(Base):
     )
     name: Mapped[str] = mapped_column(String(256), nullable=False)
     package_type: Mapped[str] = mapped_column(String(32), nullable=False)
-    component_ids: Mapped[list] = mapped_column(JSONB, nullable=False, server_default="[]")
-    tree_json: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    component_tree: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
     total_mass_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
@@ -492,11 +491,12 @@ class RobotConfiguration(Base):
     sensor_package_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("configuration_packages.package_id"), nullable=True
     )
-    generated_files: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    build_status: Mapped[str] = mapped_column(
+    status: Mapped[str] = mapped_column(
         String(32), nullable=False, server_default="draft"
     )
-    build_log: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    generated_files: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    validation_report_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())

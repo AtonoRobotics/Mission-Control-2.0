@@ -22,7 +22,7 @@ from core.integrity import run_startup_integrity_check, has_critical_failures
 from db.session import init_engines, dispose_engines, get_registry_engine, get_empirical_engine
 from rosbridge.client import RosBridgeClient
 from middleware.auth import require_role
-from api import auth, users, ros2, isaac, containers, registry, builds, workflows, agents, compute, empirical, pipelines, recordings, cloud, layouts, components, osmo, robot_builder, datasets
+from api import auth, users, ros2, isaac, containers, registry, builds, workflows, agents, compute, empirical, pipelines, recordings, cloud, layouts, components, osmo, robot_builder, datasets, stub_driver
 
 logger = structlog.get_logger(__name__)
 settings = get_settings()
@@ -125,6 +125,7 @@ app.include_router(components.router, prefix="/api/components", tags=["Component
 app.include_router(robot_builder.router, prefix="/api/robot-builder", tags=["Robot Builder"], dependencies=_viewer)
 app.include_router(datasets.router, prefix="/api/datasets", tags=["Datasets"], dependencies=_viewer)
 app.include_router(osmo.router, prefix="/api/osmo", tags=["OSMO"], dependencies=_operator)
+app.include_router(stub_driver.router, prefix="/api/stub-driver", tags=["Stub Driver"], dependencies=_viewer)
 
 
 @app.get("/health")

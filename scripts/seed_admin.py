@@ -29,6 +29,9 @@ def main():
         print("ERROR: MC_REGISTRY_DB_URL not set")
         sys.exit(1)
 
+    # Strip SQLAlchemy dialect prefix for psycopg2 compatibility
+    db_url = db_url.replace("postgresql+asyncpg://", "postgresql://")
+
     hashed = bcrypt.hashpw(args.password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
     conn = psycopg2.connect(db_url)

@@ -115,10 +115,109 @@ def build_node_registry() -> NodeRegistry:
     except ImportError as e:
         logger.warning("workflow_nodes_import_failed", category="container", error=str(e))
 
+    # Config nodes — fully implemented
+    try:
+        from workflow_engine.nodes.config import (
+            ConfigUrdfBuildNode, ConfigSensorConfigNode,
+            ConfigLaunchFileNode, ConfigCuroboConfigNode,
+        )
+        registry.register("config.urdf_build", ConfigUrdfBuildNode())
+        registry.register("config.sensor_config", ConfigSensorConfigNode())
+        registry.register("config.launch_file", ConfigLaunchFileNode())
+        registry.register("config.curob_config", ConfigCuroboConfigNode())
+        logger.info("workflow_nodes_loaded", category="config", count=4)
+    except ImportError as e:
+        logger.warning("workflow_nodes_import_failed", category="config", error=str(e))
+
+    # Validate nodes — fully implemented
+    try:
+        from workflow_engine.nodes.validate import (
+            ValidateNullCheckNode, ValidateHashCheckNode,
+            ValidateDbCompareNode, ValidateAuditNode,
+        )
+        registry.register("validate.null_check", ValidateNullCheckNode())
+        registry.register("validate.hash_check", ValidateHashCheckNode())
+        registry.register("validate.db_compare", ValidateDbCompareNode())
+        registry.register("validate.audit", ValidateAuditNode())
+        logger.info("workflow_nodes_loaded", category="validate", count=4)
+    except ImportError as e:
+        logger.warning("workflow_nodes_import_failed", category="validate", error=str(e))
+
+    # Condition nodes — fully implemented
+    try:
+        from workflow_engine.nodes.condition import (
+            ConditionIfNode, ConditionThresholdNode,
+            ConditionNullGateNode, ConditionSwitchNode,
+        )
+        registry.register("condition.if", ConditionIfNode())
+        registry.register("condition.threshold", ConditionThresholdNode())
+        registry.register("condition.null_gate", ConditionNullGateNode())
+        registry.register("condition.switch", ConditionSwitchNode())
+        logger.info("workflow_nodes_loaded", category="condition", count=4)
+    except ImportError as e:
+        logger.warning("workflow_nodes_import_failed", category="condition", error=str(e))
+
+    # Notify nodes — fully implemented
+    try:
+        from workflow_engine.nodes.notify import (
+            NotifyOperatorNode, NotifyLogNode, NotifyEmailNode,
+        )
+        registry.register("notify.operator", NotifyOperatorNode())
+        registry.register("notify.log", NotifyLogNode())
+        registry.register("notify.email", NotifyEmailNode())
+        logger.info("workflow_nodes_loaded", category="notify", count=3)
+    except ImportError as e:
+        logger.warning("workflow_nodes_import_failed", category="notify", error=str(e))
+
+    # Bag nodes — fully implemented
+    try:
+        from workflow_engine.nodes.bag import (
+            BagStartNode, BagStopNode, BagInspectNode, BagFilterNode,
+        )
+        registry.register("bag.start", BagStartNode())
+        registry.register("bag.stop", BagStopNode())
+        registry.register("bag.inspect", BagInspectNode())
+        registry.register("bag.filter", BagFilterNode())
+        logger.info("workflow_nodes_loaded", category="bag", count=4)
+    except ImportError as e:
+        logger.warning("workflow_nodes_import_failed", category="bag", error=str(e))
+
+    # Dataset nodes — fully implemented
+    try:
+        from workflow_engine.nodes.dataset import (
+            DatasetVersionNode, DatasetInspectNode, DatasetFilterNode,
+            DatasetLabelNode, DatasetSplitNode,
+        )
+        registry.register("dataset.version", DatasetVersionNode())
+        registry.register("dataset.inspect", DatasetInspectNode())
+        registry.register("dataset.filter", DatasetFilterNode())
+        registry.register("dataset.label", DatasetLabelNode())
+        registry.register("dataset.split", DatasetSplitNode())
+        logger.info("workflow_nodes_loaded", category="dataset", count=5)
+    except ImportError as e:
+        logger.warning("workflow_nodes_import_failed", category="dataset", error=str(e))
+
+    # Sim nodes — fully implemented (docker exec against isaac-sim container)
+    try:
+        from workflow_engine.nodes.sim import (
+            SimLoadStageNode, SimSetLightingNode, SimPlaceRobotNode,
+            SimSetPhysicsNode, SimResetNode, SimPlayNode, SimStopNode,
+        )
+        registry.register("sim.load_stage", SimLoadStageNode())
+        registry.register("sim.set_lighting", SimSetLightingNode())
+        registry.register("sim.place_robot", SimPlaceRobotNode())
+        registry.register("sim.set_physics", SimSetPhysicsNode())
+        registry.register("sim.reset", SimResetNode())
+        registry.register("sim.play", SimPlayNode())
+        registry.register("sim.stop", SimStopNode())
+        logger.info("workflow_nodes_loaded", category="sim", count=7)
+    except ImportError as e:
+        logger.warning("workflow_nodes_import_failed", category="sim", error=str(e))
+
     # Register stubs for all unimplemented node types
     stub_count = 0
     for category, actions in _ALL_NODE_TYPES.items():
-        if category == "container":
+        if category in ("container", "config", "validate", "condition", "notify", "bag", "dataset", "sim"):
             continue  # Already loaded above
         for action in actions:
             node_type = f"{category}.{action}"

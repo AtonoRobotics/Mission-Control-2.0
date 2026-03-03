@@ -2,7 +2,7 @@
 **Version:** 2.2.0
 **Project:** Cinema Robot Digital Twin
 **Date:** 2026-03-03
-**Status:** Active — v1 in development. Monorepo (web/desktop/ios/core), 22 registry tables, 17 API routers, auth system live, OSMO deployed.
+**Status:** Active — v1 in development. Monorepo (web/desktop/ios/core), 22 registry tables, 19 API routers, auth system live, OSMO deployed.
 
 ---
 
@@ -796,7 +796,7 @@ Grid, Axes, TF, Marker, MarkerArray, RobotModel, PointCloud2, LaserScan, Image, 
 - 15-min access tokens, 7-day refresh tokens with DB session tracking
 - Admin seeding via `scripts/seed_admin.py`
 
-### API Routers (17)
+### API Routers (19)
 
 auth, users, ros2, isaac, containers, registry, builds, workflows, agents, compute, empirical, pipelines, recordings, cloud, layouts, components, osmo
 
@@ -1050,7 +1050,7 @@ mission-control/
 │
 ├── backend/                         # FastAPI application
 │   ├── main.py
-│   ├── api/                            # 17 routers — all live
+│   ├── api/                            # 19 routers — all live
 │   │   ├── auth.py                  # Register, login, refresh, logout, OAuth (Google/GitHub)
 │   │   ├── users.py                 # User CRUD, team management
 │   │   ├── registry.py              # File registry CRUD, robot registration, scenes
@@ -1226,4 +1226,4 @@ All `lab.*` Workflow Builder nodes are v1 deliverables. Nothing is stubbed.
 ---
 
 *Spec v2.2.0 — 2026-03-03*
-*Both databases live (empirical: 6 tables + CR10 seed, registry: 24 tables at migration 0007). 17 API routers. Monorepo: packages/web + core + desktop + ios. Auth system (JWT + OAuth). OSMO v6.0 deployed on k3s. Cinema motion pipeline foundation complete.*
+*Both databases live (empirical: 6 tables + CR10 seed, registry: 24 tables at migration 0007). 19 API routers. Monorepo: packages/web + core + desktop + ios. Auth system (JWT + OAuth). OSMO v6.0 deployed on k3s. Cinema motion pipeline foundation complete.*

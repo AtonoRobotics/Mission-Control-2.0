@@ -9,17 +9,17 @@ Import order for startup:
   3. if has_critical_failures(failures): raise SystemExit
 """
 
-from backend.integrity.placeholder_scanner import (
+from .placeholder_scanner import (
     PlaceholderScanner,
     scan_for_placeholders,
     has_critical_placeholder_violations,
 )
-from backend.integrity.scope_guard import ScopeGuard
-from backend.integrity.intent_verifier import IntentVerifier, TaskIntent
-from backend.integrity.drift_score import DriftScoreCalculator
+from .scope_guard import ScopeGuard
+from .intent_verifier import IntentVerifier, TaskIntent
+from .drift_score import DriftScoreCalculator
 
 
 def run_all_startup_checks():
     """Delegate to core integrity module for startup checks."""
-    from backend.core.integrity import run_startup_integrity_check
+    from core.integrity import run_startup_integrity_check
     return run_startup_integrity_check()

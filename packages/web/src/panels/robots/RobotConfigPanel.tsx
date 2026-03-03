@@ -4,6 +4,7 @@
 
 import { useState } from 'react';
 import { useRobotStore } from '@/stores/robotStore';
+import api from '@/services/api';
 import {
   SectionHeader, ErrorMessage, Spinner, EmptyState, NullBadge, fmtDate,
 } from './shared';
@@ -39,14 +40,8 @@ export default function RobotConfigPanel() {
         reach_mm: form.reach_mm ? parseFloat(form.reach_mm) : null,
         description: form.description || null,
       };
-      const res = await fetch('/mc/api/registry/robots', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const { data: created } = await api.post('/registry/robots', body);
       await fetchRobots();
-      const created = await res.json();
       selectRobot(created.robot_id);
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : 'Failed to save');
@@ -59,12 +54,7 @@ export default function RobotConfigPanel() {
     if (!selectedRobotId) return;
     setBuildStatus(`Starting ${process}…`);
     try {
-      const res = await fetch('/mc/api/builds', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ robot_id: selectedRobotId, process }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await api.post('/builds', { robot_id: selectedRobotId, process });
       setBuildStatus(`${process} build created`);
     } catch (e) {
       setBuildStatus(`Error: ${e instanceof Error ? e.message : 'Build failed'}`);

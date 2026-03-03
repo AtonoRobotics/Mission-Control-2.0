@@ -38,7 +38,7 @@ class FileRegistry(Base):
         UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
     )
     file_type: Mapped[str] = mapped_column(String(64), nullable=False)
-    robot_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    robot_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     scene_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     version: Mapped[str] = mapped_column(String(32), nullable=False)
     file_hash: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -50,6 +50,7 @@ class FileRegistry(Base):
     promoted_at: Mapped[datetime | None] = mapped_column(nullable=True)
     promoted_by: Mapped[str | None] = mapped_column(String(256), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    content: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     STATUS_TRANSITIONS: dict[str, list[str]] = {
         "draft": ["validated", "failed"],

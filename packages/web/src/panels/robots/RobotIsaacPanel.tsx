@@ -4,6 +4,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRobotStore } from '@/stores/robotStore';
+import api from '@/services/api';
 import { SectionHeader, StatusDot, Spinner, EmptyState, fmtDate, buildStatusBadge } from './shared';
 
 interface Build {
@@ -24,9 +25,9 @@ export default function RobotIsaacPanel() {
   useEffect(() => {
     if (!selectedRobotId) return;
     setBuildsLoading(true);
-    fetch(`/mc/api/builds?robot_id=${selectedRobotId}&limit=10`)
-      .then((r) => r.ok ? r.json() : { builds: [] })
-      .then((data) => setBuilds(data.builds ?? []))
+    api.get(`/builds`, { params: { robot_id: selectedRobotId, limit: 10 } })
+      .then(({ data }) => setBuilds(data.builds ?? []))
+      .catch(() => setBuilds([]))
       .finally(() => setBuildsLoading(false));
   }, [selectedRobotId]);
 
@@ -75,11 +76,7 @@ export default function RobotIsaacPanel() {
               className="btn-secondary"
               style={{ fontSize: 10, padding: '3px 10px' }}
               onClick={() => {
-                fetch('/mc/api/builds', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ robot_id: selectedRobotId, process: 'isaac_training' }),
-                });
+                api.post('/builds', { robot_id: selectedRobotId, process: 'isaac_training' });
               }}
             >
               + New Run

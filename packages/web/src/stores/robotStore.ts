@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import api from '@/services/api';
 
 export interface RobotAsset {
   robot_id: string;
@@ -111,9 +112,7 @@ export const useRobotStore = create<RobotState>((set, get) => ({
   fetchRobots: async () => {
     set({ loading: true, error: null });
     try {
-      const res = await fetch('/mc/api/registry/robots');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
+      const { data } = await api.get('/registry/robots');
       set({ robots: Array.isArray(data) ? data : [], loading: false });
     } catch (e) {
       set({ error: e instanceof Error ? e.message : 'Failed to load robots', loading: false });
@@ -137,22 +136,20 @@ export const useRobotStore = create<RobotState>((set, get) => ({
     set({ specsLoading: true });
     try {
       const [jointsRes, linksRes, sensorsRes, spheresRes] = await Promise.allSettled([
-        fetch(`/mc/api/empirical/robots/${robotId}/joints`),
-        fetch(`/mc/api/empirical/robots/${robotId}/links`),
-        fetch(`/mc/api/empirical/robots/${robotId}/sensors`),
-        fetch(`/mc/api/empirical/robots/${robotId}/spheres`),
+        api.get(`/empirical/robots/${robotId}/joints`),
+        api.get(`/empirical/robots/${robotId}/links`),
+        api.get(`/empirical/robots/${robotId}/sensors`),
+        api.get(`/empirical/robots/${robotId}/spheres`),
       ]);
 
-      const parse = async (r: PromiseSettledResult<Response>) => {
-        if (r.status === 'fulfilled' && r.value.ok) return r.value.json();
-        return [];
-      };
+      const extract = (r: PromiseSettledResult<{ data: unknown }>) =>
+        r.status === 'fulfilled' ? r.value.data : [];
 
       set({
-        joints: await parse(jointsRes),
-        links: await parse(linksRes),
-        sensors: await parse(sensorsRes),
-        spheres: await parse(spheresRes),
+        joints: extract(jointsRes) as JointSpec[],
+        links: extract(linksRes) as LinkSpec[],
+        sensors: extract(sensorsRes) as SensorSpec[],
+        spheres: extract(spheresRes) as CollisionSphere[],
         specsLoading: false,
       });
     } catch {
@@ -163,9 +160,7 @@ export const useRobotStore = create<RobotState>((set, get) => ({
   fetchRobotFiles: async (robotId) => {
     set({ robotFilesLoading: true });
     try {
-      const res = await fetch(`/mc/api/registry/robots/${robotId}/files`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
+      const { data } = await api.get(`/registry/robots/${robotId}/files`);
       set({ robotFiles: Array.isArray(data) ? data : [], robotFilesLoading: false });
     } catch {
       set({ robotFiles: [], robotFilesLoading: false });
@@ -175,9 +170,7 @@ export const useRobotStore = create<RobotState>((set, get) => ({
   fetchFileHistory: async (fileId) => {
     set({ fileHistoryLoading: true });
     try {
-      const res = await fetch(`/mc/api/registry/files/${fileId}/history`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
+      const { data } = await api.get(`/registry/files/${fileId}/history`);
       set({ fileHistory: Array.isArray(data) ? data : [], fileHistoryLoading: false });
     } catch {
       set({ fileHistory: [], fileHistoryLoading: false });
@@ -186,11 +179,8 @@ export const useRobotStore = create<RobotState>((set, get) => ({
 
   restoreFileVersion: async (fileId) => {
     try {
-      const res = await fetch(`/mc/api/registry/files/${fileId}/restore`, {
-        method: 'POST',
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return await res.json();
+      const { data } = await api.post(`/registry/files/${fileId}/restore`);
+      return data;
     } catch {
       return null;
     }

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import api from '@/services/api';
 
 // --- Types ---
 
@@ -186,9 +187,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   fetchRegistryAssets: async () => {
     set({ registryAssetsLoading: true });
     try {
-      const res = await fetch('/mc/api/registry/files?limit=500');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
+      const { data } = await api.get('/registry/files', { params: { limit: 500 } });
       set({ registryAssets: Array.isArray(data) ? data : [], registryAssetsLoading: false });
     } catch {
       set({ registryAssets: [], registryAssetsLoading: false });
@@ -199,12 +198,11 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     try {
       const formData = new FormData();
       formData.append('file', file);
-      const res = await fetch(`/mc/api/registry/files/upload?file_type=${encodeURIComponent(fileType)}`, {
-        method: 'POST',
-        body: formData,
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const asset: RegistryAsset = await res.json();
+      const { data: asset } = await api.post<RegistryAsset>(
+        `/registry/files/upload?file_type=${encodeURIComponent(fileType)}`,
+        formData,
+        { headers: { 'Content-Type': 'multipart/form-data' } },
+      );
       set({ registryAssets: [...get().registryAssets, asset] });
       return asset;
     } catch {
@@ -215,30 +213,20 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   generateScene: async (prompt, taskType, robotId) => {
     set({ generating: true, generateError: null });
     try {
-      // Submit job — backend returns { job_id, status } with HTTP 202
-      const res = await fetch('/mc/api/pipelines/scenes/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, task_type: taskType, robot_id: robotId ?? null }),
+      const { data: submitData } = await api.post('/pipelines/scenes/generate', {
+        prompt, task_type: taskType, robot_id: robotId ?? null,
       });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
-        throw new Error(err.detail || `HTTP ${res.status}`);
-      }
-      const { job_id } = await res.json();
+      const { job_id } = submitData;
 
       // Poll until complete or failed
       const POLL_INTERVAL = 3000;
       const MAX_POLLS = 200; // ~10 minutes
       for (let i = 0; i < MAX_POLLS; i++) {
         await new Promise((r) => setTimeout(r, POLL_INTERVAL));
-        const poll = await fetch(`/mc/api/pipelines/scenes/generate/${job_id}`);
-        if (!poll.ok) throw new Error(`Poll failed: HTTP ${poll.status}`);
-        const job = await poll.json();
+        const { data: job } = await api.get(`/pipelines/scenes/generate/${job_id}`);
 
         if (job.status === 'completed' && job.result) {
           set({ sceneConfig: job.result, generating: false, savedSceneId: null });
-          // Auto-save the generated scene
           get().saveScene(job.result.name || 'Generated Scene');
           return;
         }
@@ -256,31 +244,15 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     const { sceneConfig, savedSceneId } = get();
     set({ saving: true });
     try {
+      const body = {
+        name: name ?? sceneConfig.name,
+        description: sceneConfig.description,
+        scene_json: sceneConfig,
+      };
       if (savedSceneId) {
-        // PATCH existing
-        const res = await fetch(`/mc/api/pipelines/scenes/${savedSceneId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: name ?? sceneConfig.name,
-            description: sceneConfig.description,
-            scene_json: sceneConfig,
-          }),
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        await api.patch(`/pipelines/scenes/${savedSceneId}`, body);
       } else {
-        // POST new
-        const res = await fetch('/mc/api/pipelines/scenes', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: name ?? sceneConfig.name,
-            description: sceneConfig.description,
-            scene_json: sceneConfig,
-          }),
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
+        const { data } = await api.post('/pipelines/scenes', body);
         set({ savedSceneId: data.scene_id });
       }
     } catch (e) {
@@ -292,9 +264,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
 
   loadScene: async (sceneId) => {
     try {
-      const res = await fetch(`/mc/api/pipelines/scenes/${sceneId}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
+      const { data } = await api.get(`/pipelines/scenes/${sceneId}`);
       if (data.scene_json) {
         set({
           sceneConfig: data.scene_json,
@@ -309,9 +279,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
 
   fetchSavedScenes: async () => {
     try {
-      const res = await fetch('/mc/api/pipelines/scenes?limit=50');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
+      const { data } = await api.get('/pipelines/scenes', { params: { limit: 50 } });
       set({ savedScenes: Array.isArray(data) ? data : [] });
     } catch {
       set({ savedScenes: [] });
@@ -320,8 +288,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
 
   deleteScene: async (sceneId) => {
     try {
-      const res = await fetch(`/mc/api/pipelines/scenes/${sceneId}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await api.delete(`/pipelines/scenes/${sceneId}`);
       const { savedSceneId, savedScenes } = get();
       set({
         savedScenes: savedScenes.filter((s) => s.scene_id !== sceneId),

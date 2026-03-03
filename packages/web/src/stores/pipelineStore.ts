@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import api from '@/services/api';
 
 // --- Types ---
 
@@ -111,9 +112,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
   fetchPipelines: async () => {
     set({ pipelinesLoading: true });
     try {
-      const res = await fetch('/mc/api/pipelines');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
+      const { data } = await api.get('/pipelines');
       set({ pipelines: Array.isArray(data) ? data : [], pipelinesLoading: false });
     } catch {
       set({ pipelines: [], pipelinesLoading: false });
@@ -123,9 +122,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
   fetchPipeline: async (graphId) => {
     set({ activePipelineLoading: true });
     try {
-      const res = await fetch(`/mc/api/pipelines/${graphId}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
+      const { data } = await api.get(`/pipelines/${graphId}`);
       set({ activePipeline: data, activePipelineLoading: false });
     } catch {
       set({ activePipeline: null, activePipelineLoading: false });
@@ -134,17 +131,11 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
 
   createPipeline: async (name, description) => {
     try {
-      const res = await fetch('/mc/api/pipelines', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name,
-          description: description ?? null,
-          graph_json: { schema_version: '1.0', template: '', osmo_compatible: false, nodes: [], edges: [] },
-        }),
+      const { data: pipeline } = await api.post<Pipeline>('/pipelines', {
+        name,
+        description: description ?? null,
+        graph_json: { schema_version: '1.0', template: '', osmo_compatible: false, nodes: [], edges: [] },
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const pipeline: Pipeline = await res.json();
       set({ pipelines: [...get().pipelines, pipeline] });
       return pipeline;
     } catch {
@@ -154,13 +145,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
 
   updatePipeline: async (graphId, data) => {
     try {
-      const res = await fetch(`/mc/api/pipelines/${graphId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const updated: Pipeline = await res.json();
+      const { data: updated } = await api.put<Pipeline>(`/pipelines/${graphId}`, data);
       set({
         pipelines: get().pipelines.map((p) => (p.graph_id === graphId ? updated : p)),
         activePipeline: get().activePipeline?.graph_id === graphId ? updated : get().activePipeline,
@@ -173,8 +158,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
 
   deletePipeline: async (graphId) => {
     try {
-      const res = await fetch(`/mc/api/pipelines/${graphId}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await api.delete(`/pipelines/${graphId}`);
       set({
         pipelines: get().pipelines.filter((p) => p.graph_id !== graphId),
         activePipeline: get().activePipeline?.graph_id === graphId ? null : get().activePipeline,
@@ -187,9 +171,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
   fetchTemplates: async () => {
     set({ templatesLoading: true });
     try {
-      const res = await fetch('/mc/api/pipelines/templates');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
+      const { data } = await api.get('/pipelines/templates');
       set({ templates: Array.isArray(data) ? data : [], templatesLoading: false });
     } catch {
       set({ templates: [], templatesLoading: false });
@@ -198,11 +180,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
 
   instantiateTemplate: async (templateId) => {
     try {
-      const res = await fetch(`/mc/api/pipelines/templates/${templateId}/instantiate`, {
-        method: 'POST',
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const pipeline: Pipeline = await res.json();
+      const { data: pipeline } = await api.post<Pipeline>(`/pipelines/templates/${templateId}/instantiate`);
       set({ pipelines: [...get().pipelines, pipeline] });
       return pipeline;
     } catch {
@@ -213,9 +191,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
   fetchRuns: async (graphId) => {
     set({ runsLoading: true });
     try {
-      const res = await fetch(`/mc/api/pipelines/${graphId}/runs`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
+      const { data } = await api.get(`/pipelines/${graphId}/runs`);
       set({ runs: Array.isArray(data) ? data : [], runsLoading: false });
     } catch {
       set({ runs: [], runsLoading: false });
@@ -224,9 +200,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
 
   startRun: async (graphId) => {
     try {
-      const res = await fetch(`/mc/api/pipelines/${graphId}/run`, { method: 'POST' });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const run: PipelineRun = await res.json();
+      const { data: run } = await api.post<PipelineRun>(`/pipelines/${graphId}/run`);
       set({ runs: [run, ...get().runs], activeRun: run });
       return run;
     } catch {
@@ -236,9 +210,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
 
   fetchRun: async (runId) => {
     try {
-      const res = await fetch(`/mc/api/pipelines/runs/${runId}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const run: PipelineRun = await res.json();
+      const { data: run } = await api.get<PipelineRun>(`/pipelines/runs/${runId}`);
       set({ activeRun: run });
     } catch {
       set({ activeRun: null });

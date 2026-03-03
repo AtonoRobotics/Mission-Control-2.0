@@ -186,6 +186,61 @@ class Ros2ParamSnapshot(Base):
 # =============================================================================
 
 
+# =============================================================================
+# 0004 — Auth Tables
+# =============================================================================
+
+
+class Team(Base):
+    __tablename__ = "teams"
+
+    team_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    name: Mapped[str] = mapped_column(String(256), unique=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    email: Mapped[str] = mapped_column(String(256), unique=True, nullable=False)
+    display_name: Mapped[str] = mapped_column(String(256), nullable=False)
+    password_hash: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    avatar_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    auth_provider: Mapped[str] = mapped_column(String(32), nullable=False, server_default="local")
+    role: Mapped[str] = mapped_column(String(32), nullable=False, server_default="viewer")
+    team_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("teams.team_id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    last_login: Mapped[datetime | None] = mapped_column(nullable=True)
+
+
+class Session(Base):
+    __tablename__ = "sessions"
+
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    device: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(nullable=False)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
+# =============================================================================
+# 0002 — Additional Tables
+# =============================================================================
+
+
 class Robot(Base):
     __tablename__ = "robots"
 

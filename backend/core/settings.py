@@ -66,6 +66,14 @@ class Settings(BaseSettings):
     MC_OLLAMA_MODEL: str = "qwen2.5-coder:32b"
     MC_OLLAMA_TIMEOUT: int = 300
 
+    # --- Cloud Storage (S3 / MinIO) ---
+    MC_S3_ENDPOINT_URL: str = ""
+    MC_S3_BUCKET: str = "mission-control"
+    MC_S3_ACCESS_KEY: str = ""
+    MC_S3_SECRET_KEY: str = ""
+    MC_S3_REGION: str = "us-east-1"
+    MC_S3_PRESIGN_EXPIRE: int = 3600
+
     # --- Security ---
     MC_SECRET_KEY: str
 

@@ -2,17 +2,21 @@
 Recordings API — CRUD + start/stop recording + MCAP file streaming.
 """
 
+import asyncio
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+import structlog
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from core.settings import get_settings
 from services.mcap_writer import McapRecorder
+
+logger = structlog.get_logger(__name__)
 
 router = APIRouter()
 settings = get_settings()
@@ -39,6 +43,7 @@ class RecordingUpdate(BaseModel):
 class RecordingStart(BaseModel):
     device_name: str
     topics: list[dict]  # [{name, type}]
+    auto_upload: bool = False
 
 
 class RecordingOut(BaseModel):
@@ -110,18 +115,54 @@ async def delete_recording(recording_id: str):
     return {"detail": "Recording deleted"}
 
 
+# ── Auto-upload background task ──────────────────────────────────────────────
+
+
+async def _auto_upload_recording(recording_id: str) -> None:
+    """Upload completed MCAP file to S3 in background."""
+    from services.cloud_storage import get_cloud_storage
+
+    rec = _recordings.get(recording_id)
+    if not rec or not rec.get("local_path"):
+        return
+
+    rec["status"] = "uploading"
+    local_path = rec["local_path"]
+    filename = Path(local_path).name
+    s3_key = f"recordings/{rec['device_name']}/{filename}"
+
+    try:
+        storage = get_cloud_storage()
+        ok = await asyncio.to_thread(
+            storage.upload_file, local_path, s3_key, "application/octet-stream"
+        )
+        if ok:
+            rec["status"] = "cloud"
+            rec["storage_url"] = storage.presign_download(s3_key)
+            logger.info("recording_uploaded", recording_id=recording_id, s3_key=s3_key)
+        else:
+            rec["status"] = "complete"  # revert on failure
+            logger.warning("recording_upload_failed", recording_id=recording_id)
+    except Exception as exc:
+        rec["status"] = "complete"
+        logger.error("recording_upload_error", recording_id=recording_id, error=str(exc))
+
+
 # ── Recording control ─────────────────────────────────────────────────────────
+
+_pending_auto_upload: bool = False  # track if current recording wants auto-upload
 
 
 @router.post("/start", response_model=RecordingOut)
 async def start_recording(body: RecordingStart):
-    global _active_recorder
+    global _active_recorder, _pending_auto_upload
     if _active_recorder and _active_recorder.recording:
         raise HTTPException(status_code=409, detail="Recording already in progress")
 
     output_dir = settings.MC_BAG_STORAGE_PATH or "/tmp/mcap_recordings"
     _active_recorder = McapRecorder(output_dir=output_dir, device_name=body.device_name)
     file_path = _active_recorder.start(body.topics)
+    _pending_auto_upload = body.auto_upload
 
     recording_id = str(uuid.uuid4())
     rec = {
@@ -145,11 +186,13 @@ async def start_recording(body: RecordingStart):
 
 @router.post("/stop", response_model=RecordingOut)
 async def stop_recording():
-    global _active_recorder
+    global _active_recorder, _pending_auto_upload
     if not _active_recorder or not _active_recorder.recording:
         raise HTTPException(status_code=409, detail="No active recording")
 
     result = _active_recorder.stop()
+    auto_upload = _pending_auto_upload
+    _pending_auto_upload = False
 
     # Find the active recording entry and update it
     for rec in _recordings.values():
@@ -160,6 +203,11 @@ async def stop_recording():
             rec["size_bytes"] = result["size_bytes"]
             rec["topics"] = result["topics"]
             _active_recorder = None
+
+            # Kick off background S3 upload if requested
+            if auto_upload:
+                asyncio.create_task(_auto_upload_recording(rec["recording_id"]))
+
             return rec
 
     _active_recorder = None

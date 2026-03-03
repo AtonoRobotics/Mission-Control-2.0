@@ -49,6 +49,7 @@ import LatencyMonitorPanel from '@/panels/LatencyMonitor/LatencyMonitorPanel';
 import FrequencyMonitorPanel from '@/panels/FrequencyMonitor/FrequencyMonitorPanel';
 import BagRecorderPanel from '@/panels/BagRecorder/BagRecorderPanel';
 import McapBrowserPanel from '@/panels/McapBrowser/McapBrowserPanel';
+import CloudSettingsPanel from '@/panels/CloudSettings/CloudSettingsPanel';
 
 // Register all panels
 registerPanel({ id: 'viewport3d', title: '3D Viewport', category: '3d-spatial', component: Viewport3D, platforms: ['web', 'desktop'] });
@@ -90,6 +91,7 @@ registerPanel({ id: 'latency-monitor', title: 'Latency Monitor', category: 'diag
 registerPanel({ id: 'frequency-monitor', title: 'Frequency Monitor', category: 'diagnostics', component: FrequencyMonitorPanel, platforms: ['web', 'desktop', 'ios'] });
 registerPanel({ id: 'bag-recorder', title: 'Bag Recorder', category: 'recording', component: BagRecorderPanel, platforms: ['web', 'desktop'], requiresLiveData: true });
 registerPanel({ id: 'mcap-browser', title: 'MCAP Browser', category: 'recording', component: McapBrowserPanel, platforms: ['web', 'desktop', 'ios'] });
+registerPanel({ id: 'cloud-settings', title: 'Cloud Settings', category: 'infrastructure', component: CloudSettingsPanel, platforms: ['web', 'desktop'] });
 
 // Register all display types
 initDisplays();

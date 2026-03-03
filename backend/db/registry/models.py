@@ -381,3 +381,30 @@ class Recording(Base):
     shared: Mapped[bool] = mapped_column(Boolean, server_default="false")
     tags: Mapped[dict | None] = mapped_column(JSONB, server_default="'[]'::jsonb")
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
+# =============================================================================
+# 0005 — Cloud Objects
+# =============================================================================
+
+
+class CloudObject(Base):
+    __tablename__ = "cloud_objects"
+
+    object_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    s3_key: Mapped[str] = mapped_column(String(1024), unique=True, nullable=False)
+    bucket: Mapped[str] = mapped_column(String(256), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(128), nullable=False, server_default="application/octet-stream")
+    size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    object_type: Mapped[str] = mapped_column(String(64), nullable=False)  # recording, config, dataset
+    source_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.user_id"), nullable=True
+    )
+    team_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("teams.team_id"), nullable=True
+    )
+    status: Mapped[str] = mapped_column(String(32), nullable=False, server_default="uploading")
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())

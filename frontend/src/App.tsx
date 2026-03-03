@@ -36,11 +36,11 @@ registerPanel({ id: 'properties', title: 'Properties', category: 'utility', comp
 registerPanel({ id: 'rqtGraph', title: 'ROS Graph', category: 'ros2-inspect', component: RQTGraphPanel, platforms: ['web', 'desktop'] });
 registerPanel({ id: 'actionGraph', title: 'Action Graph', category: 'ros2-inspect', component: ActionGraphPanel, platforms: ['web', 'desktop'] });
 registerPanel({ id: 'overview', title: 'Overview', category: 'infrastructure', component: OverviewPage, platforms: ['web', 'desktop', 'ios'] });
-registerPanel({ id: 'fleet', title: 'Fleet', category: 'infrastructure', component: FleetPage, platforms: ['web', 'desktop'] });
-registerPanel({ id: 'agents', title: 'Agents', category: 'infrastructure', component: AgentsPage, platforms: ['web', 'desktop'] });
-registerPanel({ id: 'infra', title: 'Infrastructure', category: 'infrastructure', component: InfraPage, platforms: ['web', 'desktop'] });
-registerPanel({ id: 'registry', title: 'Registry', category: 'project', component: RegistryPage, platforms: ['web', 'desktop'] });
-registerPanel({ id: 'pipelines', title: 'Pipelines', category: 'project', component: PipelinesPage, platforms: ['web', 'desktop'] });
+registerPanel({ id: 'fleet-status', title: 'Fleet Status', category: 'infrastructure', component: FleetPage, platforms: ['web', 'desktop'] });
+registerPanel({ id: 'agent-monitor', title: 'Agent Monitor', category: 'infrastructure', component: AgentsPage, platforms: ['web', 'desktop'] });
+registerPanel({ id: 'compute-monitor', title: 'Compute Monitor', category: 'infrastructure', component: InfraPage, platforms: ['web', 'desktop'] });
+registerPanel({ id: 'registry-browser', title: 'Registry Browser', category: 'project', component: RegistryPage, platforms: ['web', 'desktop'] });
+registerPanel({ id: 'pipeline-builder', title: 'Pipeline Builder', category: 'project', component: PipelinesPage, platforms: ['web', 'desktop'] });
 registerPanel({ id: 'robot-list', title: 'Robot List', category: 'ros2-control', component: RobotListPanel, platforms: ['web', 'desktop'] });
 registerPanel({ id: 'robot-config', title: 'Robot Config', category: 'ros2-control', component: RobotConfigPanel, platforms: ['web', 'desktop'] });
 registerPanel({ id: 'robot-isaac', title: 'Isaac Pipeline', category: 'isaac', component: RobotIsaacPanel, platforms: ['web', 'desktop'] });

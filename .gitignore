@@ -66,3 +66,9 @@ logs/
 # Workflows — YAML exports ARE committed (version controlled)
 # !workflows/**/*.yaml  ← already tracked, no rule needed
 packages/web/.vite/
+
+# Build artifacts
+packages/desktop/dist-ts/
+packages/desktop/dist/
+packages/web/vite.config.d.ts
+packages/web/vite.config.js

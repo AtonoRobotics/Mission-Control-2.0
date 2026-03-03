@@ -5,6 +5,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRobotStore } from '@/stores/robotStore';
 import { SectionHeader, StatusDot, EmptyState } from './shared';
+import api from '@/services/api';
 
 interface DriverStatus {
   connected: boolean;
@@ -31,9 +32,8 @@ export default function RobotRealPanel() {
     let active = true;
     const poll = async () => {
       try {
-        const res = await fetch('/mc/api/stub-driver/status');
-        if (res.ok && active) {
-          const data: DriverStatus = await res.json();
+        const { data } = await api.get<DriverStatus>('/stub-driver/status');
+        if (active) {
           setStatus(data);
           // Sync sliders to actual positions on first connected poll
           if (data.connected && !slidersInitialized.current && data.positions.length === 6) {
@@ -56,25 +56,21 @@ export default function RobotRealPanel() {
   const handleConnect = useCallback(async () => {
     setConnecting(true);
     try {
-      await fetch('/mc/api/stub-driver/connect', { method: 'POST' });
+      await api.post('/stub-driver/connect');
     } catch { /* ignore */ }
     setConnecting(false);
   }, []);
 
   const handleDisconnect = useCallback(async () => {
     try {
-      await fetch('/mc/api/stub-driver/disconnect', { method: 'POST' });
+      await api.post('/stub-driver/disconnect');
     } catch { /* ignore */ }
     slidersInitialized.current = false;
   }, []);
 
   const sendCommand = useCallback(async (positions: number[]) => {
     try {
-      await fetch('/mc/api/stub-driver/command', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ positions }),
-      });
+      await api.post('/stub-driver/command', { positions });
     } catch { /* ignore */ }
   }, []);
 

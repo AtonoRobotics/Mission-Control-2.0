@@ -4,10 +4,10 @@
  * Layout selector, +Panel, data source, robot selector, user menu.
  */
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useLayoutStore } from '@/stores/layoutStore';
 import { useAuthStore } from '@/stores/authStore';
-import { useRosBridgeStore } from '@/stores/rosBridgeStore';
+import { useConnectionStatus, useDataSource, useDataSourceSwitch } from '@/data-source/hooks';
 import PanelCatalog from './PanelCatalog';
 
 export default function TopBar() {
@@ -18,7 +18,20 @@ export default function TopBar() {
   const { savedLayouts, activeLayoutId, loadLayout, saveLayout, deleteLayout, resetLayout } =
     useLayoutStore();
   const { user, logout } = useAuthStore();
-  const rosStatus = useRosBridgeStore((s) => s.status);
+  const connectionStatus = useConnectionStatus();
+  const dataSource = useDataSource();
+  const { switchToLive, switchToMcap } = useDataSourceSwitch();
+
+  const handleOpenMcap = useCallback(() => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.mcap';
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (file) await switchToMcap(file);
+    };
+    input.click();
+  }, [switchToMcap]);
 
   return (
     <>
@@ -119,17 +132,30 @@ export default function TopBar() {
               height: 6,
               borderRadius: '50%',
               background:
-                rosStatus === 'connected'
+                connectionStatus === 'connected'
                   ? 'var(--success, #4caf50)'
-                  : rosStatus === 'connecting'
+                  : connectionStatus === 'connecting'
                     ? 'var(--warning, #ff9800)'
                     : 'var(--danger, #f44336)',
             }}
           />
           <span style={{ color: 'var(--text-secondary)' }}>
-            {rosStatus === 'connected' ? 'Live' : rosStatus === 'connecting' ? 'Connecting' : 'Offline'}
+            {dataSource.type === 'mcap'
+              ? 'MCAP'
+              : connectionStatus === 'connected'
+                ? 'Live'
+                : connectionStatus === 'connecting'
+                  ? 'Connecting'
+                  : 'Offline'}
           </span>
         </div>
+
+        {/* Data source switching */}
+        {dataSource.type === 'mcap' ? (
+          <ToolbarButton onClick={() => switchToLive()}>Go Live</ToolbarButton>
+        ) : (
+          <ToolbarButton onClick={handleOpenMcap}>Open MCAP</ToolbarButton>
+        )}
 
         {/* User menu */}
         {user && (

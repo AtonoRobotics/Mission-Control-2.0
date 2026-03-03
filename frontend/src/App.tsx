@@ -9,12 +9,10 @@ import RQTGraphPanel from '@/panels/RQTGraph/RQTGraphPanel';
 import ActionGraphPanel from '@/panels/ActionGraph/ActionGraphPanel';
 import { initDisplays } from '@/displays/init';
 import { TFTreeManager } from '@/ros/tfTree';
-import { startTopicPolling, stopTopicPolling } from '@/ros/topicPoller';
-import { connect, getStatus, onStatusChange } from '@/ros/connection';
-import { useRosBridgeStore } from '@/stores/rosBridgeStore';
 import LoginPage from '@/pages/LoginPage';
 import TopBar from '@/components/TopBar';
 import Layout from '@/components/Layout';
+import { DataSourceProvider } from '@/data-source/DataSourceProvider';
 
 // Pages → registered as panels
 import OverviewPage from '@/pages/OverviewPage';
@@ -52,7 +50,6 @@ initDisplays();
 const tfManager = new TFTreeManager();
 
 export default function App() {
-  const setStatus = useRosBridgeStore((s) => s.setStatus);
   const { isAuthenticated, fetchMe } = useAuthStore();
 
   // Handle OAuth callback query params
@@ -71,32 +68,25 @@ export default function App() {
     fetchMe();
   }, [fetchMe]);
 
+  // TF tree lifecycle (runs alongside DataSourceProvider)
   useEffect(() => {
     if (!isAuthenticated) return;
-
-    connect();
-    setStatus(getStatus());
-    const unsub = onStatusChange(setStatus);
     tfManager.start();
-    startTopicPolling(3000);
-
-    return () => {
-      unsub();
-      tfManager.stop();
-      stopTopicPolling();
-    };
-  }, [setStatus, isAuthenticated]);
+    return () => tfManager.stop();
+  }, [isAuthenticated]);
 
   if (!isAuthenticated) {
     return <LoginPage />;
   }
 
   return (
-    <div className="h-screen w-screen flex flex-col viewport-bg">
-      <TopBar />
-      <div className="flex-1 min-w-0 min-h-0">
-        <Layout />
+    <DataSourceProvider>
+      <div className="h-screen w-screen flex flex-col viewport-bg">
+        <TopBar />
+        <div className="flex-1 min-w-0 min-h-0">
+          <Layout />
+        </div>
       </div>
-    </div>
+    </DataSourceProvider>
   );
 }
